@@ -315,6 +315,43 @@ describe('Intelligence Service routes', () => {
   });
 });
 
+describe('Asset Service routes', () => {
+  it('requires asset:read to read and asset:manage to write', async () => {
+    const app = await start(backend(ok));
+    const viewer = await issuer.tokenFor(randomUUID(), ['viewer']);
+    const researcher = await issuer.tokenFor(randomUUID(), ['vulnerability-researcher']);
+    const analyst = await issuer.tokenFor(randomUUID(), ['security-analyst']);
+    const id = '00000000-0000-4000-8000-000000000001';
+
+    await app.http.get('/api/v1/vendors').expect(401);
+    await app.http.get('/api/v1/vendors?q=acme').set(bearer(viewer)).expect(200);
+    await app.http.get(`/api/v1/products/${id}/vulnerabilities`).set(bearer(viewer)).expect(200);
+    await app.http
+      .get('/api/v1/cve-associations?cveId=CVE-2026-90001')
+      .set(bearer(viewer))
+      .expect(200);
+    await app.http.post('/api/v1/vendors').set(bearer(viewer)).send({}).expect(403);
+    await app.http.post('/api/v1/products').set(bearer(researcher)).send({}).expect(403);
+    await app.http.patch(`/api/v1/products/${id}`).set(bearer(viewer)).send({}).expect(403);
+    await app.http
+      .put(`/api/v1/products/${id}/vulnerabilities/CVE-2026-90001`)
+      .set(bearer(viewer))
+      .send({})
+      .expect(403);
+    await app.http.delete(`/api/v1/vendors/${id}`).set(bearer(viewer)).expect(403);
+    await app.http.post('/api/v1/vendors').set(bearer(analyst)).send({ name: 'x' }).expect(200);
+    await app.http.delete(`/api/v1/vendors/${id}`).set(bearer(analyst)).expect(200);
+
+    expect(forwarded.map((request) => `${request.method} ${request.url}`)).toEqual([
+      'GET http://asset-service.internal:4000/api/v1/vendors?q=acme',
+      `GET http://asset-service.internal:4000/api/v1/products/${id}/vulnerabilities`,
+      'GET http://asset-service.internal:4000/api/v1/cve-associations?cveId=CVE-2026-90001',
+      'POST http://asset-service.internal:4000/api/v1/vendors',
+      `DELETE http://asset-service.internal:4000/api/v1/vendors/${id}`,
+    ]);
+  });
+});
+
 describe('CVE Service routes', () => {
   it('requires cve:read to read and cve:manage to write', async () => {
     const app = await start(backend(ok));

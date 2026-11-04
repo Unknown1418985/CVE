@@ -1,51 +1,42 @@
 # Asset Service
 
-Vendor and product intelligence, including CPE normalisation.
+Vendor and product intelligence: catalog, CPE names and product identifiers, CVE-to-product
+associations with affected version ranges, product vulnerability history and vendor analytics.
 
 - Package: `@cve/asset-service`
 - Default port: `4004`
 - Database: `asset_service` (owned exclusively by this service, role `asset_service`)
-
-## Responsibilities
-
-- Vendor and product catalogue.
-- Product/version normalisation and CPE matching.
-- Vendor and product exposure views.
-
-## Current status (Phase 0)
-
-Only the service skeleton exists: configuration validation, structured logging, security
-headers, correlation IDs, the error envelope and health endpoints. No business features are
-implemented yet.
+- Full documentation: [docs/asset-service.md](../../docs/asset-service.md)
 
 ## Endpoints
 
-| Method | Path                   | Description                                                      |
-| ------ | ---------------------- | ---------------------------------------------------------------- |
-| GET    | `/api/v1/health/live`  | Liveness probe                                                   |
-| GET    | `/api/v1/health/ready` | Readiness probe; TCP reachability of PostgreSQL, RabbitMQ, Redis |
-| GET    | `/api/v1/health`       | Same as readiness                                                |
-| GET    | `/api/v1/docs`         | OpenAPI UI (only when `SWAGGER_ENABLED=true`)                    |
+All under `/api/v1`; reads need `asset:read`, writes `asset:manage`.
 
-## Configuration
+| Method             | Path                                          | Description                        |
+| ------------------ | --------------------------------------------- | ---------------------------------- |
+| GET, POST          | `/vendors`                                    | Search / create vendors            |
+| GET, PATCH, DELETE | `/vendors/:vendorId`                          | Vendor                             |
+| GET                | `/vendors/:vendorId/products`                 | Products of a vendor               |
+| GET                | `/vendors/:vendorId/analytics`                | Vendor vulnerability analytics     |
+| GET, POST          | `/products`                                   | Search / create products           |
+| GET, PATCH, DELETE | `/products/:productId`                        | Product                            |
+| POST, DELETE       | `/products/:productId/cpes[/:cpeId]`          | CPE 2.3 names                      |
+| POST, DELETE       | `/products/:productId/identifiers[/:id]`      | purl, SWID, SKU identifiers        |
+| GET                | `/products/:productId/vulnerabilities`        | Associated CVEs, ranges, CVE facts |
+| PUT, DELETE        | `/products/:productId/vulnerabilities/:cveId` | Analyst-maintained association     |
+| GET                | `/products/:productId/vulnerability-history`  | Association timeline               |
+| GET                | `/cve-associations`                           | Associations across the catalog    |
+| GET                | `/health/live`, `/health/ready`, `/health`    | Health probes                      |
 
-| Variable                  | Required | Default       |
-| ------------------------- | -------- | ------------- |
-| `DATABASE_URL`            | yes      |               |
-| `RABBITMQ_URL`            | yes      |               |
-| `REDIS_URL`               | yes      |               |
-| `PORT`                    | no       | `4004`        |
-| `HOST`                    | no       | `0.0.0.0`     |
-| `NODE_ENV`                | no       | `development` |
-| `LOG_LEVEL`               | no       | `info`        |
-| `CORS_ALLOWED_ORIGINS`    | no       | none          |
-| `SWAGGER_ENABLED`         | no       | `false`       |
-| `HEALTH_CHECK_TIMEOUT_MS` | no       | `2000`        |
+Events: consumes `intelligence.cve-observation.recorded` and `cve.record.*`; publishes
+`asset.vendor.*`, `asset.product.*` and `asset.cve-association.*` through the outbox.
 
 ## Scripts
 
 ```bash
-pnpm --filter @cve/asset-service dev        # watch mode (reads ../../.env)
-pnpm --filter @cve/asset-service test
+pnpm --filter @cve/asset-service dev               # watch mode (reads ../../.env)
+pnpm --filter @cve/asset-service test              # unit + HTTP tests
+pnpm --filter @cve/asset-service test:integration  # PostgreSQL integration tests
 pnpm --filter @cve/asset-service typecheck
+pnpm --filter @cve/asset-service prisma:migrate:deploy
 ```

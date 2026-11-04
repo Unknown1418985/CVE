@@ -124,3 +124,79 @@ export const cpe23Schema = z
   .trim()
   .max(512)
   .refine(isCpe23, { message: 'must be a CPE 2.3 formatted string (cpe:2.3:part:vendor:…)' });
+
+/** The eleven attribute components of a CPE 2.3 formatted string, still in escaped form. */
+export interface Cpe23Parts {
+  readonly part: string;
+  readonly vendor: string;
+  readonly product: string;
+  readonly version: string;
+  readonly update: string;
+  readonly edition: string;
+  readonly language: string;
+  readonly swEdition: string;
+  readonly targetSw: string;
+  readonly targetHw: string;
+  readonly other: string;
+}
+
+/**
+ * Splits a valid CPE 2.3 formatted string into its components. Components are lower-cased: CPE
+ * name matching is case-insensitive (NISTIR 7696). Returns `null` for invalid input.
+ */
+export function parseCpe23(value: string): Cpe23Parts | null {
+  const trimmed = value.trim();
+  if (!isCpe23(trimmed)) return null;
+  const [
+    ,
+    ,
+    part,
+    vendor,
+    product,
+    version,
+    update,
+    edition,
+    language,
+    swEdition,
+    targetSw,
+    targetHw,
+    other,
+  ] = splitCpe(trimmed.toLowerCase());
+  return {
+    part: part ?? '*',
+    vendor: vendor ?? '*',
+    product: product ?? '*',
+    version: version ?? '*',
+    update: update ?? '*',
+    edition: edition ?? '*',
+    language: language ?? '*',
+    swEdition: swEdition ?? '*',
+    targetSw: targetSw ?? '*',
+    targetHw: targetHw ?? '*',
+    other: other ?? '*',
+  };
+}
+
+/** Formats components back into a CPE 2.3 formatted string. */
+export function formatCpe23(parts: Cpe23Parts): string {
+  return [
+    'cpe',
+    '2.3',
+    parts.part,
+    parts.vendor,
+    parts.product,
+    parts.version,
+    parts.update,
+    parts.edition,
+    parts.language,
+    parts.swEdition,
+    parts.targetSw,
+    parts.targetHw,
+    parts.other,
+  ].join(':');
+}
+
+/** CPE 2.3 name of the product itself: every component after `product` is a wildcard. */
+export function cpe23ProductName(parts: Pick<Cpe23Parts, 'part' | 'vendor' | 'product'>): string {
+  return `cpe:2.3:${parts.part}:${parts.vendor}:${parts.product}:*:*:*:*:*:*:*:*`;
+}

@@ -1,11 +1,35 @@
-import { loadEnv, serviceEnvSchema, type EnvSource } from '@cve/config';
+import {
+  booleanStringSchema,
+  httpUrlSchema,
+  loadEnv,
+  serviceEnvSchema,
+  type EnvSource,
+} from '@cve/config';
 import { SERVICE_DEFAULT_PORTS } from '@cve/contracts';
 import { assertServiceOwnsDatabase } from '@cve/database';
-import type { z } from 'zod';
+import { z } from 'zod';
 
 import { SERVICE_NAME } from '../service.js';
 
-export const envSchema = serviceEnvSchema(SERVICE_DEFAULT_PORTS[SERVICE_NAME]);
+export const envSchema = serviceEnvSchema(SERVICE_DEFAULT_PORTS[SERVICE_NAME]).extend({
+  /** Internal Keycloak base URL including the relative path; used to fetch the realm JWKS. */
+  KEYCLOAK_URL: httpUrlSchema,
+  /** Public Keycloak base URL that browsers use; it defines the token issuer. */
+  KEYCLOAK_PUBLIC_URL: httpUrlSchema,
+  KEYCLOAK_REALM: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,64}$/)
+    .default('cve-platform'),
+  /** Audience every access token must contain. */
+  KEYCLOAK_AUDIENCE: z.string().min(1).default('cve-api'),
+  KEYCLOAK_TIMEOUT_MS: z.coerce.number().int().min(500).max(30_000).default(5_000),
+  /** Publishes outbox events to RabbitMQ. Disabled only in tests. */
+  OUTBOX_RELAY_ENABLED: booleanStringSchema.default(true),
+  /** Consumes `intelligence.cve-observation.recorded` and `cve.record.*`. Disabled only in tests. */
+  EVENT_CONSUMERS_ENABLED: booleanStringSchema.default(true),
+  /** How long applied event IDs are kept for duplicate suppression. */
+  PROCESSED_EVENT_RETENTION_DAYS: z.coerce.number().int().min(1).max(365).default(30),
+});
 
 export type Env = z.infer<typeof envSchema>;
 
