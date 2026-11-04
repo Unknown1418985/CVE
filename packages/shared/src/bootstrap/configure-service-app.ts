@@ -9,6 +9,7 @@ import { buildCorsOptions, createSecurityHeadersMiddleware } from '@cve/security
 
 import { ApiExceptionFilter } from '../http/api-exception.filter.js';
 import { createRequestContextMiddleware } from '../http/correlation-id.js';
+import { createHttpMetricsMiddleware, type ServiceMetrics } from '../metrics/metrics.js';
 
 export interface ConfigureServiceAppOptions {
   readonly service: string;
@@ -18,6 +19,8 @@ export interface ConfigureServiceAppOptions {
   readonly swaggerEnabled: boolean;
   /** Maximum accepted JSON body size. */
   readonly bodyLimit?: string;
+  /** Records HTTP request metrics when provided. */
+  readonly metrics?: ServiceMetrics;
 }
 
 export const DOCS_PATH = `${API_PREFIX}/docs`;
@@ -35,6 +38,9 @@ export function configureServiceApp(
   server.disable('x-powered-by');
   server.set('trust proxy', 'loopback, linklocal, uniquelocal');
 
+  if (options.metrics) {
+    app.use(createHttpMetricsMiddleware(options.metrics));
+  }
   app.use(createSecurityHeadersMiddleware({ docsPathPrefixes: [`/${DOCS_PATH}`] }));
   app.use(
     createRequestContextMiddleware({

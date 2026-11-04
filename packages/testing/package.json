@@ -12,6 +12,10 @@
     "./vitest": {
       "types": "./dist/vitest.d.ts",
       "default": "./dist/vitest.js"
+    },
+    "./integration": {
+      "types": "./dist/integration.d.ts",
+      "default": "./dist/integration.js"
     }
   },
   "files": [

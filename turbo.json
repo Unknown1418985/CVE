@@ -24,6 +24,16 @@
     },
     "clean": {
       "cache": false
+    },
+    "test:integration": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "env": [
+        "RABBITMQ_TEST_URL",
+        "RABBITMQ_TEST_ADMIN_URL",
+        "REDIS_TEST_URL",
+        "REDIS_TEST_ADMIN_URL"
+      ]
     }
   }
 }

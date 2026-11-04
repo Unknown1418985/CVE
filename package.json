@@ -19,8 +19,11 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "compose:config": "docker compose --env-file .env.example config --quiet",
-    "clean": "turbo run clean && rm -rf node_modules .turbo"
+    "compose:config": "docker compose --env-file .env.example config --quiet && docker compose --env-file .env.example -f compose.yaml -f compose.dev.yaml --profile apps --profile observability config --quiet",
+    "clean": "turbo run clean && rm -rf node_modules .turbo",
+    "env:generate": "pnpm --filter @cve/infra-provisioner build && node tools/infra-provisioner/dist/generate-env.js",
+    "test:integration": "turbo run test:integration --concurrency=1",
+    "infra:wait": "pnpm --filter @cve/infra-provisioner build && node tools/infra-provisioner/dist/wait-for-stack.js"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

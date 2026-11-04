@@ -1,9 +1,12 @@
+import type { Server } from 'node:http';
+
 import type { DynamicModule, INestApplication, Type } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 
 import type { BaseServiceEnv } from '@cve/config';
 import { createLogger, PinoNestLogger, type Logger } from '@cve/logger';
 
+import { createServiceMetrics, startMetricsServer } from '../metrics/metrics.js';
 import { configureServiceApp } from './configure-service-app.js';
 
 export interface BootstrapServiceOptions {
@@ -37,16 +40,33 @@ export async function bootstrapService(options: BootstrapServiceOptions): Promis
     bodyParser: false,
   });
 
+  const metrics =
+    env.METRICS_PORT === undefined
+      ? undefined
+      : createServiceMetrics(options.service, options.version);
+
   configureServiceApp(app, {
     service: options.service,
     version: options.version,
     logger,
     corsAllowedOrigins: env.CORS_ALLOWED_ORIGINS,
     swaggerEnabled: env.SWAGGER_ENABLED,
+    ...(metrics ? { metrics } : {}),
   });
   app.enableShutdownHooks();
 
   await app.listen(env.PORT, env.HOST);
+  if (metrics && env.METRICS_PORT !== undefined) {
+    const metricsServer = await startMetricsServer({
+      metrics,
+      port: env.METRICS_PORT,
+      host: env.HOST,
+      logger,
+    });
+    (app.getHttpServer() as Server).once('close', () => {
+      metricsServer.close();
+    });
+  }
   logger.info({ port: env.PORT, host: env.HOST, version: options.version }, 'service started');
   return { app, logger };
 }
