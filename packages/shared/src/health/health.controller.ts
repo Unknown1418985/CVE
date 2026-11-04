@@ -4,6 +4,7 @@ import type { Response } from 'express';
 
 import type { HealthReport } from '@cve/contracts';
 
+import { Public } from '../http/public.decorator.js';
 import { HealthService } from './health.service.js';
 
 export interface HealthResponse {
@@ -11,6 +12,7 @@ export interface HealthResponse {
 }
 
 @ApiTags('health')
+@Public()
 @Controller('health')
 export class HealthController {
   constructor(private readonly health: HealthService) {}

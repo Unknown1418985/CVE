@@ -6,3 +6,4 @@ coverage
 pnpm-lock.yaml
 next-env.d.ts
 CLAUDE.md
+**/src/generated

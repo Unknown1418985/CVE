@@ -14,3 +14,6 @@ next-env.d.ts
 *.log
 .DS_Store
 .certs/
+
+# Prisma clients are generated at build time (`prisma generate`).
+**/src/generated/

@@ -33,7 +33,7 @@ This document describes the structure established in Phase 0. It is updated as e
 
 | Service              | Port | Owns                                                                 |
 | -------------------- | ---- | -------------------------------------------------------------------- |
-| api-gateway          | 4000 | No data. Routing, rate limiting, health aggregation                  |
+| api-gateway          | 4000 | No data. Authentication, routing, rate limiting, health aggregation  |
 | identity-service     | 4001 | Users, roles, permissions, audit log (Keycloak as identity provider) |
 | cve-service          | 4002 | CVE records, CVSS v3.1/v4.0, CWE, affected products, references      |
 | intelligence-service | 4003 | Source adapters, synchronisation state and logs, raw source records  |
@@ -102,6 +102,7 @@ clients for those dependencies.
 | `@cve/testing`   | NestJS testing, supertest, unplugin-swc            | tests only                |
 | `@cve/messaging` | contracts, logger, amqplib                         | services                  |
 | `@cve/jobs`      | contracts, logger, bullmq, ioredis                 | services                  |
+| `@cve/auth`      | contracts, logger, shared, jose, NestJS (peer)     | services, gateway         |
 
 Packages are ESM, compiled with `tsc` to `dist/`, and built before dependants by Turborepo
 (`dependsOn: ["^build"]`). Shared packages contain no business logic.
@@ -118,7 +119,11 @@ Packages are ESM, compiled with `tsc` to `dist/`, and built before dependants by
 
 ## Security notes for later phases
 
-The following are specified in `CLAUDE.md` and are deliberately not implemented yet:
-Keycloak authentication and RBAC (Phase 1), audit logging (Phase 1), download hardening and
+Authentication, RBAC and audit logging (Phase 1) are described in [identity.md](identity.md): every
+service validates Keycloak access tokens itself with `@cve/auth` (zero trust between the gateway and
+services), routes are private by default, and permissions are derived from roles by a static mapping
+in `@cve/contracts`.
+
+The following are specified in `CLAUDE.md` and are deliberately not implemented yet: web login, download hardening and
 quarantine (Phase 6), TLS termination, metrics and backups (Phase 10). Downloaded PoC content will
 never be executed or automatically extracted.

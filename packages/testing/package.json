@@ -16,6 +16,10 @@
     "./integration": {
       "types": "./dist/integration.d.ts",
       "default": "./dist/integration.js"
+    },
+    "./auth": {
+      "types": "./dist/auth.d.ts",
+      "default": "./dist/auth.js"
     }
   },
   "files": [
@@ -31,7 +35,8 @@
   "dependencies": {
     "@swc/core": "^1.16.21",
     "supertest": "^7.3.1",
-    "unplugin-swc": "^2.0.0"
+    "unplugin-swc": "^2.0.0",
+    "jose": "^6.2.15"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

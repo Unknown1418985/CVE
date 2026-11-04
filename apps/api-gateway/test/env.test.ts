@@ -28,3 +28,18 @@ describe('api-gateway environment', () => {
     );
   });
 });
+
+describe('api-gateway authentication settings', () => {
+  it('requires the introspection secret while session checks are enabled', () => {
+    const env = gatewayTestEnv();
+    delete env['KEYCLOAK_INTROSPECTION_CLIENT_SECRET'];
+    expect(() => loadGatewayEnv(env)).toThrow(/KEYCLOAK_INTROSPECTION_CLIENT_SECRET/);
+    expect(() => loadGatewayEnv({ ...env, AUTH_SESSION_CHECK_ENABLED: 'false' })).not.toThrow();
+  });
+
+  it('requires the Keycloak URLs', () => {
+    const env = gatewayTestEnv();
+    delete env['KEYCLOAK_PUBLIC_URL'];
+    expect(() => loadGatewayEnv(env)).toThrow(EnvValidationError);
+  });
+});
