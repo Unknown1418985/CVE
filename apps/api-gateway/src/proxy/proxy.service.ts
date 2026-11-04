@@ -36,6 +36,7 @@ const FORWARDED_REQUEST_HEADERS = [
   'authorization',
   'accept',
   'user-agent',
+  'if-match',
   IDEMPOTENCY_KEY_HEADER,
 ] as const;
 const RELAYED_RESPONSE_HEADERS = [
@@ -44,6 +45,8 @@ const RELAYED_RESPONSE_HEADERS = [
   'www-authenticate',
   'retry-after',
   'location',
+  'etag',
+  'idempotent-replayed',
 ] as const;
 const METHODS_WITH_BODY = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 // Dot segments and encoded separators could make the backend resolve a different route than

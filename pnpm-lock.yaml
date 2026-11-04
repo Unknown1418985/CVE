@@ -581,6 +581,9 @@ importers:
 
   services/cve-service:
     dependencies:
+      '@cve/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
       '@cve/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -593,6 +596,9 @@ importers:
       '@cve/logger':
         specifier: workspace:*
         version: link:../../packages/logger
+      '@cve/messaging':
+        specifier: workspace:*
+        version: link:../../packages/messaging
       '@cve/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -608,9 +614,21 @@ importers:
       '@nestjs/swagger':
         specifier: ^12.1.0
         version: 12.1.0(@nestjs/common@12.3.2(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.3.2)(reflect-metadata@0.2.2)(typescript@6.0.3)
+      '@prisma/adapter-pg':
+        specifier: ^7.10.1
+        version: 7.10.1
+      '@prisma/client':
+        specifier: ^7.10.1
+        version: 7.10.1(prisma@7.10.1(@types/node@24.19.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)
       express:
         specifier: ^5.3.0
         version: 5.3.0
+      pg:
+        specifier: ^8.23.1
+        version: 8.23.1
+      prisma:
+        specifier: ^7.10.1
+        version: 7.10.1(@types/node@24.19.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3)
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
@@ -633,6 +651,9 @@ importers:
       '@types/node':
         specifier: ^24.0.0
         version: 24.19.2
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
       '@types/supertest':
         specifier: ^7.2.1
         version: 7.2.1
