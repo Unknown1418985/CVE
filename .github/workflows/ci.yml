@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      # Type-aware linting resolves workspace packages through their built type declarations.
+      - run: pnpm build
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm audit --prod --audit-level high
+      - run: pnpm compose:config
+
+  # Starts the real Compose stack and runs the live integration suites against it.
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: verify
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm env:generate
+
+      - name: Start infrastructure (development ports on 127.0.0.1)
+        run: |
+          export COMPOSE_FILE=compose.yaml:compose.dev.yaml
+          docker compose up -d --build
+          pnpm infra:wait
+          docker compose ps -a
+          mkdir -p .certs
+          docker compose exec -T opensearch cat config/certs/ca.pem > .certs/platform-ca.pem
+
+      - name: Integration tests (messaging, jobs, data store isolation, Keycloak)
+        run: pnpm test:integration
+
+      - name: Start the full stack (apps + observability, no development ports)
+        run: |
+          docker compose -f compose.yaml -f compose.dev.yaml down
+          export COMPOSE_PROFILES=apps,observability
+          docker compose up -d --build
+          pnpm infra:wait
+          docker compose ps -a
+
+      - name: Full-stack tests (Nginx routing, exposure, Prometheus targets, Grafana)
+        run: INFRA_TEST_FULL_STACK=true pnpm --filter @cve/infra-tests test:integration
+
+      - name: Container logs
+        if: failure()
+        run: docker compose --profile apps --profile observability logs --no-color --tail 200
+
+      - name: Tear down
+        if: always()
+        run: docker compose --profile apps --profile observability down -v

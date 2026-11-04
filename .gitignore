@@ -1,0 +1,19 @@
+node_modules/
+dist/
+.next/
+out/
+.turbo/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+
+.env
+.env.*
+!.env.example
+
+*.log
+.DS_Store
+.certs/
+
+# Prisma clients are generated at build time (`prisma generate`).
+**/src/generated/

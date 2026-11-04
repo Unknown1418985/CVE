@@ -1,0 +1,891 @@
+# CVE Intelligence Platform — Docker Compose stack.
+#
+#   pnpm env:generate                                         # create .env with random secrets
+#   docker compose up -d --build                              # infrastructure + provisioning jobs
+#   docker compose --profile apps up -d --build               # + gateway, services, web, Nginx
+#   docker compose --profile observability up -d              # + Prometheus, Grafana, exporters
+#   docker compose -f compose.yaml -f compose.dev.yaml up -d  # publish infra ports on 127.0.0.1 for `pnpm dev`
+#
+# Security model (see docs/infrastructure.md):
+# - Only Nginx (127.0.0.1:8080) and Grafana (127.0.0.1:3001) publish ports. Databases, brokers
+#   and object storage sit on internal networks without any published port.
+# - Every service has its own credentials for PostgreSQL, Redis, RabbitMQ and MinIO/OpenSearch,
+#   scoped to the resources it owns. Secrets come from `.env`, which is never committed.
+# - Containers drop all Linux capabilities, cannot gain privileges, have CPU/memory/PID limits
+#   and, where the image allows it, a read-only root filesystem.
+
+name: cve-platform
+
+# ------------------------------------------------------------------------------ shared fragments
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: '3'
+
+x-hardening: &hardening
+  security_opt:
+    - no-new-privileges:true
+  cap_drop: [ALL]
+
+x-node-healthcheck: &node-healthcheck
+  healthcheck:
+    test:
+      - CMD
+      - node
+      - -e
+      - "fetch('http://127.0.0.1:'+process.env.PORT+'/api/v1/health/live').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
+    interval: 15s
+    timeout: 5s
+    retries: 5
+    start_period: 20s
+
+x-backend-service: &backend-service
+  profiles: [apps]
+  restart: unless-stopped
+  read_only: true
+  tmpfs:
+    - /tmp
+  <<: [*hardening, *logging, *node-healthcheck]
+  networks: [backend, data, observability]
+  deploy:
+    resources:
+      limits:
+        cpus: '0.50'
+        memory: 384M
+        pids: 256
+
+x-backend-depends: &backend-depends
+  postgres:
+    condition: service_healthy
+  redis:
+    condition: service_healthy
+  rabbitmq:
+    condition: service_healthy
+  infra-provisioner:
+    condition: service_completed_successfully
+
+x-backend-env: &backend-env
+  NODE_ENV: production
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  HOST: 0.0.0.0
+  SWAGGER_ENABLED: ${SWAGGER_ENABLED:-false}
+  METRICS_PORT: 9464
+
+x-object-storage-env: &object-storage-env
+  S3_ENDPOINT: http://minio:9000
+  S3_REGION: us-east-1
+  S3_FORCE_PATH_STYLE: 'true'
+
+services:
+  # ============================================================================ data stores
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    user: postgres
+    read_only: true
+    tmpfs:
+      - /var/run/postgresql
+      - /tmp
+    <<: [*hardening, *logging]
+    command:
+      - postgres
+      - -c
+      - config_file=/etc/postgresql/postgresql.conf
+      - -c
+      - hba_file=/etc/postgresql/pg_hba.conf
+    environment:
+      POSTGRES_USER: ${POSTGRES_SUPERUSER:?POSTGRES_SUPERUSER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?POSTGRES_SUPERUSER_PASSWORD is required}
+      POSTGRES_DB: postgres
+      POSTGRES_INITDB_ARGS: --auth-local=scram-sha-256 --auth-host=scram-sha-256
+      IDENTITY_SERVICE_DB_PASSWORD: ${IDENTITY_SERVICE_DB_PASSWORD:?required}
+      CVE_SERVICE_DB_PASSWORD: ${CVE_SERVICE_DB_PASSWORD:?required}
+      INTELLIGENCE_SERVICE_DB_PASSWORD: ${INTELLIGENCE_SERVICE_DB_PASSWORD:?required}
+      ASSET_SERVICE_DB_PASSWORD: ${ASSET_SERVICE_DB_PASSWORD:?required}
+      POC_SERVICE_DB_PASSWORD: ${POC_SERVICE_DB_PASSWORD:?required}
+      DOWNLOAD_SERVICE_DB_PASSWORD: ${DOWNLOAD_SERVICE_DB_PASSWORD:?required}
+      EXPLOIT_SERVICE_DB_PASSWORD: ${EXPLOIT_SERVICE_DB_PASSWORD:?required}
+      REPORTING_SERVICE_DB_PASSWORD: ${REPORTING_SERVICE_DB_PASSWORD:?required}
+      NOTIFICATION_SERVICE_DB_PASSWORD: ${NOTIFICATION_SERVICE_DB_PASSWORD:?required}
+      KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?required}
+      POSTGRES_EXPORTER_PASSWORD: ${POSTGRES_EXPORTER_PASSWORD:?required}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+      - ./infra/postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ./infra/postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+    networks: [data]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U "$${POSTGRES_USER}" -d postgres']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 1G
+          pids: 512
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    user: redis
+    read_only: true
+    tmpfs:
+      - /run/redis:uid=999,gid=1000,mode=0700
+    <<: [*hardening, *logging]
+    entrypoint: ['/bin/sh', '/usr/local/bin/cve-redis-entrypoint.sh']
+    environment:
+      REDIS_ADMIN_PASSWORD: ${REDIS_ADMIN_PASSWORD:?required}
+      REDIS_EXPORTER_PASSWORD: ${REDIS_EXPORTER_PASSWORD:?required}
+      IDENTITY_SERVICE_REDIS_PASSWORD: ${IDENTITY_SERVICE_REDIS_PASSWORD:?required}
+      CVE_SERVICE_REDIS_PASSWORD: ${CVE_SERVICE_REDIS_PASSWORD:?required}
+      INTELLIGENCE_SERVICE_REDIS_PASSWORD: ${INTELLIGENCE_SERVICE_REDIS_PASSWORD:?required}
+      ASSET_SERVICE_REDIS_PASSWORD: ${ASSET_SERVICE_REDIS_PASSWORD:?required}
+      POC_SERVICE_REDIS_PASSWORD: ${POC_SERVICE_REDIS_PASSWORD:?required}
+      DOWNLOAD_SERVICE_REDIS_PASSWORD: ${DOWNLOAD_SERVICE_REDIS_PASSWORD:?required}
+      EXPLOIT_SERVICE_REDIS_PASSWORD: ${EXPLOIT_SERVICE_REDIS_PASSWORD:?required}
+      REPORTING_SERVICE_REDIS_PASSWORD: ${REPORTING_SERVICE_REDIS_PASSWORD:?required}
+      NOTIFICATION_SERVICE_REDIS_PASSWORD: ${NOTIFICATION_SERVICE_REDIS_PASSWORD:?required}
+      # Used only by the health check below.
+      REDISCLI_AUTH: ${REDIS_ADMIN_PASSWORD}
+    volumes:
+      - redis-data:/data
+      - ./infra/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - ./infra/redis/entrypoint.sh:/usr/local/bin/cve-redis-entrypoint.sh:ro
+    networks: [data]
+    healthcheck:
+      test: ['CMD-SHELL', 'redis-cli --no-auth-warning --user admin ping | grep -q PONG']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+          pids: 128
+
+  rabbitmq:
+    image: rabbitmq:4.1-management-alpine
+    restart: unless-stopped
+    hostname: rabbitmq
+    user: rabbitmq
+    read_only: true
+    tmpfs:
+      - /tmp
+    <<: [*hardening, *logging]
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_ADMIN_USER:?RABBITMQ_ADMIN_USER is required}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_ADMIN_PASSWORD:?RABBITMQ_ADMIN_PASSWORD is required}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+      - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/conf.d/20-cve-platform.conf:ro
+    networks: [data, observability]
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'rabbitmq-diagnostics -q check_running && rabbitmq-diagnostics -q check_port_connectivity',
+        ]
+      interval: 15s
+      timeout: 15s
+      retries: 10
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 1G
+          pids: 1024
+
+  opensearch-init:
+    # Generates TLS material and the security bootstrap configuration (no network access).
+    image: opensearchproject/opensearch:2.19.1
+    user: root
+    network_mode: none
+    <<: *logging
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER]
+    entrypoint: ['/bin/bash', '/init/init-security.sh']
+    environment:
+      OPENSEARCH_ADMIN_PASSWORD: ${OPENSEARCH_ADMIN_PASSWORD:?required}
+      OPENSEARCH_KEYSTORE_PASSWORD: ${OPENSEARCH_KEYSTORE_PASSWORD:?required}
+    volumes:
+      - ./infra/opensearch/init-security.sh:/init/init-security.sh:ro
+      - opensearch-certs:/certs
+      - opensearch-security:/security-config
+      - platform-ca:/platform-ca
+
+  opensearch:
+    image: opensearchproject/opensearch:2.19.1
+    restart: unless-stopped
+    <<: [*hardening, *logging]
+    environment:
+      discovery.type: single-node
+      DISABLE_INSTALL_DEMO_CONFIG: 'true'
+      OPENSEARCH_JAVA_OPTS: -Xms512m -Xmx512m
+      OPENSEARCH_KEYSTORE_PASSWORD: ${OPENSEARCH_KEYSTORE_PASSWORD:?required}
+      # Used only by the health check below.
+      OPENSEARCH_ADMIN_PASSWORD: ${OPENSEARCH_ADMIN_PASSWORD:?required}
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+      - ./infra/opensearch/opensearch.yml:/usr/share/opensearch/config/opensearch.yml:ro
+      - opensearch-certs:/usr/share/opensearch/config/certs:ro
+      - opensearch-security:/usr/share/opensearch/config/opensearch-security:ro
+    networks: [data]
+    depends_on:
+      opensearch-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          curl -sf --cacert config/certs/ca.pem -u "admin:$${OPENSEARCH_ADMIN_PASSWORD}"
+          "https://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s" > /dev/null
+      interval: 20s
+      timeout: 10s
+      retries: 15
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 1536M
+          pids: 2048
+
+  minio:
+    # The upstream project no longer publishes images on Docker Hub; set MINIO_IMAGE to the
+    # image your organisation trusts (see docs/infrastructure.md).
+    image: ${MINIO_IMAGE:-pgsty/minio:RELEASE.2026-08-04T00-00-00Z}
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /root/.minio
+    <<: [*hardening, *logging]
+    command: ['server', '/data', '--console-address', ':9001']
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+      MINIO_BROWSER_REDIRECT: 'false'
+      # Metrics are reachable only on the internal observability network.
+      MINIO_PROMETHEUS_AUTH_TYPE: public
+      MINIO_API_REQUESTS_MAX: '200'
+    volumes:
+      - minio-data:/data
+    networks: [data, observability]
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+          pids: 512
+
+  # ============================================================================ provisioning jobs
+  minio-init:
+    image: ${MINIO_IMAGE:-pgsty/minio:RELEASE.2026-08-04T00-00-00Z}
+    read_only: true
+    tmpfs:
+      - /tmp
+    <<: [*hardening, *logging]
+    entrypoint: ['/bin/sh', '/init/provision.sh']
+    environment:
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      DOWNLOAD_SERVICE_MINIO_SECRET_KEY: ${DOWNLOAD_SERVICE_MINIO_SECRET_KEY:?required}
+      POC_SERVICE_MINIO_SECRET_KEY: ${POC_SERVICE_MINIO_SECRET_KEY:?required}
+      REPORTING_SERVICE_MINIO_SECRET_KEY: ${REPORTING_SERVICE_MINIO_SECRET_KEY:?required}
+    volumes:
+      - ./infra/minio/provision.sh:/init/provision.sh:ro
+    networks: [data]
+    depends_on:
+      minio:
+        condition: service_healthy
+
+  infra-provisioner:
+    # RabbitMQ vhost, events exchange, service users and permissions; OpenSearch roles and users.
+    image: cve-platform/infra-provisioner:local
+    build:
+      context: .
+      dockerfile: infra/docker/node-service.Dockerfile
+      args:
+        PACKAGE: '@cve/infra-provisioner'
+    read_only: true
+    <<: [*hardening, *logging]
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      RABBITMQ_MANAGEMENT_URL: http://rabbitmq:15672
+      RABBITMQ_ADMIN_USER: ${RABBITMQ_ADMIN_USER}
+      RABBITMQ_ADMIN_PASSWORD: ${RABBITMQ_ADMIN_PASSWORD}
+      IDENTITY_SERVICE_RABBITMQ_PASSWORD: ${IDENTITY_SERVICE_RABBITMQ_PASSWORD:?required}
+      CVE_SERVICE_RABBITMQ_PASSWORD: ${CVE_SERVICE_RABBITMQ_PASSWORD:?required}
+      INTELLIGENCE_SERVICE_RABBITMQ_PASSWORD: ${INTELLIGENCE_SERVICE_RABBITMQ_PASSWORD:?required}
+      ASSET_SERVICE_RABBITMQ_PASSWORD: ${ASSET_SERVICE_RABBITMQ_PASSWORD:?required}
+      POC_SERVICE_RABBITMQ_PASSWORD: ${POC_SERVICE_RABBITMQ_PASSWORD:?required}
+      DOWNLOAD_SERVICE_RABBITMQ_PASSWORD: ${DOWNLOAD_SERVICE_RABBITMQ_PASSWORD:?required}
+      EXPLOIT_SERVICE_RABBITMQ_PASSWORD: ${EXPLOIT_SERVICE_RABBITMQ_PASSWORD:?required}
+      REPORTING_SERVICE_RABBITMQ_PASSWORD: ${REPORTING_SERVICE_RABBITMQ_PASSWORD:?required}
+      NOTIFICATION_SERVICE_RABBITMQ_PASSWORD: ${NOTIFICATION_SERVICE_RABBITMQ_PASSWORD:?required}
+      OPENSEARCH_URL: https://opensearch:9200
+      OPENSEARCH_ADMIN_PASSWORD: ${OPENSEARCH_ADMIN_PASSWORD}
+      OPENSEARCH_CA_FILE: /run/platform-ca/platform-ca.pem
+      CVE_SERVICE_OPENSEARCH_PASSWORD: ${CVE_SERVICE_OPENSEARCH_PASSWORD:?required}
+    volumes:
+      - platform-ca:/run/platform-ca:ro
+    networks: [data]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      opensearch:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+          pids: 64
+
+  # ============================================================================ identity
+  keycloak:
+    image: keycloak/keycloak:26.4
+    restart: unless-stopped
+    <<: [*hardening, *logging]
+    command: ['start', '--import-realm']
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER:?KEYCLOAK_ADMIN_USER is required}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD is required}
+      # Served behind Nginx under /auth; TLS terminates at the proxy.
+      KC_HOSTNAME: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8080/auth}
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: 'true'
+      KC_HTTP_RELATIVE_PATH: /auth
+      KC_HTTP_ENABLED: 'true'
+      KC_HTTP_PORT: '8180'
+      KC_PROXY_HEADERS: xforwarded
+      KC_HEALTH_ENABLED: 'true'
+      KC_METRICS_ENABLED: 'true'
+      KC_CACHE: local
+      KC_LOG_CONSOLE_OUTPUT: json
+      # Substituted into infra/keycloak/import/cve-platform-realm.json on first import.
+      KEYCLOAK_WEB_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost:8080}
+      KEYCLOAK_API_CLIENT_SECRET: ${KEYCLOAK_API_CLIENT_SECRET:?required}
+      KEYCLOAK_IDENTITY_SERVICE_CLIENT_SECRET: ${KEYCLOAK_IDENTITY_SERVICE_CLIENT_SECRET:?required}
+    volumes:
+      - ./infra/keycloak/import:/opt/keycloak/data/import:ro
+    networks: [frontend, backend, data, observability]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /auth/health/ready HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 &&
+          grep -q '"status": *"UP"' <&3
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 90s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 1G
+          pids: 512
+
+  # ============================================================================ applications
+  api-gateway:
+    <<: *backend-service
+    build:
+      context: .
+      dockerfile: infra/docker/node-service.Dockerfile
+      args:
+        PACKAGE: '@cve/api-gateway'
+    environment:
+      <<: *backend-env
+      PORT: 4000
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+      IDENTITY_SERVICE_URL: http://identity-service:4001
+      CVE_SERVICE_URL: http://cve-service:4002
+      INTELLIGENCE_SERVICE_URL: http://intelligence-service:4003
+      ASSET_SERVICE_URL: http://asset-service:4004
+      POC_SERVICE_URL: http://poc-service:4005
+      DOWNLOAD_SERVICE_URL: http://download-service:4006
+      EXPLOIT_SERVICE_URL: http://exploit-service:4007
+      REPORTING_SERVICE_URL: http://reporting-service:4008
+      NOTIFICATION_SERVICE_URL: http://notification-service:4009
+      # Tokens are validated against the realm JWKS fetched over the internal network; the
+      # issuer is the public URL browsers use. Introspection confirms sessions are still active.
+      KEYCLOAK_URL: http://keycloak:8180/auth
+      KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8080/auth}
+      KEYCLOAK_INTROSPECTION_CLIENT_SECRET: ${KEYCLOAK_API_CLIENT_SECRET:?required}
+    # The gateway owns no data store: it only reaches the web tier and the backend services.
+    networks: [frontend, backend, observability]
+    depends_on:
+      keycloak:
+        condition: service_healthy
+
+  # Applies the Identity Service's Prisma migrations, then exits.
+  identity-service-migrate:
+    profiles: [apps]
+    image: cve-platform/identity-service:local
+    build:
+      context: .
+      dockerfile: infra/docker/node-service.Dockerfile
+      args:
+        PACKAGE: '@cve/identity-service'
+    restart: 'no'
+    read_only: true
+    tmpfs:
+      - /tmp
+    <<: [*hardening, *logging]
+    command: ['node', 'node_modules/prisma/build/index.js', 'migrate', 'deploy']
+    environment:
+      DATABASE_URL: postgresql://identity_service:${IDENTITY_SERVICE_DB_PASSWORD}@postgres:5432/identity_service
+    networks: [data]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+          pids: 128
+
+  identity-service:
+    <<: *backend-service
+    image: cve-platform/identity-service:local
+    build:
+      context: .
+      dockerfile: infra/docker/node-service.Dockerfile
+      args:
+        PACKAGE: '@cve/identity-service'
+    environment:
+      <<: *backend-env
+      PORT: 4001
+      DATABASE_URL: postgresql://identity_service:${IDENTITY_SERVICE_DB_PASSWORD}@postgres:5432/identity_service
+      REDIS_URL: redis://identity-service:${IDENTITY_SERVICE_REDIS_PASSWORD}@redis:6379
+      RABBITMQ_URL: amqp://identity-service:${IDENTITY_SERVICE_RABBITMQ_PASSWORD}@rabbitmq:5672/cve
+      KEYCLOAK_URL: http://keycloak:8180/auth
+      KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8080/auth}
+      KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_IDENTITY_SERVICE_CLIENT_SECRET:?required}
+      ACCOUNT_REDIRECT_URI: ${PUBLIC_ORIGIN:-http://localhost:8080}/settings
+    depends_on:
+      <<: *backend-depends
+      keycloak:
+        condition: service_healthy
+      identity-service-migrate:
+        condition: service_completed_successfully
+
+  cve-service:
+    <<: *backend-service
+    build:
+      context: .
+      dockerfile: infra/docker/node-service.Dockerfile
+      args:
+        PACKAGE: '@cve/cve-service'
+    environment:
+      <<: *backend-env
+      PORT: 4002
+      DATABASE_URL: postgresql://cve_service:${CVE_SERVICE_DB_PASSWORD}@postgres:5432/cve_service
+      REDIS_URL: redis://cve-service:${CVE_SERVICE_REDIS_PASSWORD}@redis:6379
+      RABBITMQ_URL: amqp://cve-service:${CVE_SERVICE_RABBITMQ_PASSWORD}@rabbitmq:5672/cve
+      OPENSEARCH_URL: https://opensearch:9200
+      OPENSEARCH_USERNAME: cve-service
+      OPENSEARCH_PASSWORD: ${CVE_SERVICE_OPENSEARCH_PASSWORD}
+      OPENSEARCH_CA_FILE: /run/platform-ca/platform-ca.pem
+    volumes:
+      - platform-ca:/run/platform-ca:ro
+    depends_on:
+      <<: *backend-depends
+      opensearch:
+        condition: service_healthy
+
+  intelligence-service:
+    <<: *backend-service
+    build:
+      context: .
+      dockerfile: infra/docker/node-service.Dockerfile
+      args:
+        PACKAGE: '@cve/intelligence-service'
+    environment:
+      <<: *backend-env
+      PORT: 4003
+      DATABASE_URL: postgresql://intelligence_service:${INTELLIGENCE_SERVICE_DB_PASSWORD}@postgres:5432/intelligence_service
+      REDIS_URL: redis://intelligence-service:${INTELLIGENCE_SERVICE_REDIS_PASSWORD}@redis:6379
+      RABBITMQ_URL: amqp://intelligence-service:${INTELLIGENCE_SERVICE_RABBITMQ_PASSWORD}@rabbitmq:5672/cve
+    # Synchronises NVD, MITRE, CISA KEV and EPSS: needs outbound internet access.
+    networks: [backend, data, observability, egress]
+    depends_on: *backend-depends
+
+  asset-service:
+    <<: *backend-service
+    build:
+      context: .
+      dockerfile: infra/docker/node-service.Dockerfile
+      args:
+        PACKAGE: '@cve/asset-service'
+    environment:
+      <<: *backend-env
+      PORT: 4004
+      DATABASE_URL: postgresql://asset_service:${ASSET_SERVICE_DB_PASSWORD}@postgres:5432/asset_service
+      REDIS_URL: redis://asset-service:${ASSET_SERVICE_REDIS_PASSWORD}@redis:6379
+      RABBITMQ_URL: amqp://asset-service:${ASSET_SERVICE_RABBITMQ_PASSWORD}@rabbitmq:5672/cve
+    depends_on: *backend-depends
+
+  poc-service:
+    <<: *backend-service
+    build:
+      context: .
+      dockerfile: infra/docker/node-service.Dockerfile
+      args:
+        PACKAGE: '@cve/poc-service'
+    environment:
+      <<: [*backend-env, *object-storage-env]
+      PORT: 4005
+      DATABASE_URL: postgresql://poc_service:${POC_SERVICE_DB_PASSWORD}@postgres:5432/poc_service
+      REDIS_URL: redis://poc-service:${POC_SERVICE_REDIS_PASSWORD}@redis:6379
+      RABBITMQ_URL: amqp://poc-service:${POC_SERVICE_RABBITMQ_PASSWORD}@rabbitmq:5672/cve
+      S3_ACCESS_KEY_ID: poc-service
+      S3_SECRET_ACCESS_KEY: ${POC_SERVICE_MINIO_SECRET_KEY}
+    # Discovers PoCs on GitHub and Exploit-DB: needs outbound internet access.
+    networks: [backend, data, observability, egress]
+    depends_on:
+      <<: *backend-depends
+      minio-init:
+        condition: service_completed_successfully
+
+  download-service:
+    <<: *backend-service
+    build:
+      context: .
+      dockerfile: infra/docker/node-service.Dockerfile
+      args:
+        PACKAGE: '@cve/download-service'
+    environment:
+      <<: [*backend-env, *object-storage-env]
+      PORT: 4006
+      DATABASE_URL: postgresql://download_service:${DOWNLOAD_SERVICE_DB_PASSWORD}@postgres:5432/download_service
+      REDIS_URL: redis://download-service:${DOWNLOAD_SERVICE_REDIS_PASSWORD}@redis:6379
+      RABBITMQ_URL: amqp://download-service:${DOWNLOAD_SERVICE_RABBITMQ_PASSWORD}@rabbitmq:5672/cve
+      S3_ACCESS_KEY_ID: download-service
+      S3_SECRET_ACCESS_KEY: ${DOWNLOAD_SERVICE_MINIO_SECRET_KEY}
+    # Downloads untrusted artifacts from allowlisted sources: needs outbound internet access.
+    networks: [backend, data, observability, egress]
+    depends_on:
+      <<: *backend-depends
+      minio-init:
+        condition: service_completed_successfully
+
+  exploit-service:
+    <<: *backend-service
+    build:
+      context: .
+      dockerfile: infra/docker/node-service.Dockerfile
+      args:
+        PACKAGE: '@cve/exploit-service'
+    environment:
+      <<: *backend-env
+      PORT: 4007
+      DATABASE_URL: postgresql://exploit_service:${EXPLOIT_SERVICE_DB_PASSWORD}@postgres:5432/exploit_service
+      REDIS_URL: redis://exploit-service:${EXPLOIT_SERVICE_REDIS_PASSWORD}@redis:6379
+      RABBITMQ_URL: amqp://exploit-service:${EXPLOIT_SERVICE_RABBITMQ_PASSWORD}@rabbitmq:5672/cve
+    networks: [backend, data, observability, egress]
+    depends_on: *backend-depends
+
+  reporting-service:
+    <<: *backend-service
+    build:
+      context: .
+      dockerfile: infra/docker/node-service.Dockerfile
+      args:
+        PACKAGE: '@cve/reporting-service'
+    environment:
+      <<: [*backend-env, *object-storage-env]
+      PORT: 4008
+      DATABASE_URL: postgresql://reporting_service:${REPORTING_SERVICE_DB_PASSWORD}@postgres:5432/reporting_service
+      REDIS_URL: redis://reporting-service:${REPORTING_SERVICE_REDIS_PASSWORD}@redis:6379
+      RABBITMQ_URL: amqp://reporting-service:${REPORTING_SERVICE_RABBITMQ_PASSWORD}@rabbitmq:5672/cve
+      S3_ACCESS_KEY_ID: reporting-service
+      S3_SECRET_ACCESS_KEY: ${REPORTING_SERVICE_MINIO_SECRET_KEY}
+    depends_on:
+      <<: *backend-depends
+      minio-init:
+        condition: service_completed_successfully
+
+  notification-service:
+    <<: *backend-service
+    build:
+      context: .
+      dockerfile: infra/docker/node-service.Dockerfile
+      args:
+        PACKAGE: '@cve/notification-service'
+    environment:
+      <<: *backend-env
+      PORT: 4009
+      DATABASE_URL: postgresql://notification_service:${NOTIFICATION_SERVICE_DB_PASSWORD}@postgres:5432/notification_service
+      REDIS_URL: redis://notification-service:${NOTIFICATION_SERVICE_REDIS_PASSWORD}@redis:6379
+      RABBITMQ_URL: amqp://notification-service:${NOTIFICATION_SERVICE_RABBITMQ_PASSWORD}@rabbitmq:5672/cve
+    # Sends e-mail and webhooks: needs outbound internet access.
+    networks: [backend, data, observability, egress]
+    depends_on: *backend-depends
+
+  web:
+    profiles: [apps]
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: infra/docker/web.Dockerfile
+    environment:
+      NODE_ENV: production
+      API_GATEWAY_INTERNAL_URL: http://api-gateway:4000
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/apps/web/.next/cache
+    <<: [*hardening, *logging]
+    networks: [frontend]
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 512M
+          pids: 256
+
+  nginx:
+    profiles: [apps]
+    image: nginx:1.28-alpine
+    restart: unless-stopped
+    user: '101:101'
+    read_only: true
+    tmpfs:
+      - /tmp
+    <<: [*hardening, *logging]
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - '127.0.0.1:8080:8080'
+    networks: [public, frontend, observability]
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:8081/healthz']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      web:
+        condition: service_healthy
+      api-gateway:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 128M
+          pids: 128
+
+  # ============================================================================ observability
+  prometheus:
+    profiles: [observability]
+    image: prom/prometheus:v3.5.0
+    restart: unless-stopped
+    read_only: true
+    <<: [*hardening, *logging]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --storage.tsdb.retention.size=4GB
+      - --web.console.templates=/etc/prometheus/consoles
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus-data:/prometheus
+    networks: [observability]
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:9090/-/ready']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+          pids: 256
+
+  grafana:
+    profiles: [observability]
+    image: grafana/grafana:12.1.0
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    <<: [*hardening, *logging]
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-grafana-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
+      GF_SECURITY_DISABLE_GRAVATAR: 'true'
+      GF_SECURITY_COOKIE_SAMESITE: strict
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+      GF_AUTH_ANONYMOUS_ENABLED: 'false'
+      GF_ANALYTICS_REPORTING_ENABLED: 'false'
+      GF_ANALYTICS_CHECK_FOR_UPDATES: 'false'
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: 'false'
+      GF_NEWS_NEWS_FEED_ENABLED: 'false'
+      GF_LOG_MODE: console
+      GF_LOG_CONSOLE_FORMAT: json
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana-dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - '127.0.0.1:3001:3000'
+    networks: [observability, ops]
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:3000/api/health']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+          pids: 256
+
+  postgres-exporter:
+    profiles: [observability]
+    image: prometheuscommunity/postgres-exporter:v0.17.1
+    restart: unless-stopped
+    read_only: true
+    <<: [*hardening, *logging]
+    environment:
+      DATA_SOURCE_URI: postgres:5432/postgres?sslmode=disable
+      DATA_SOURCE_USER: postgres_exporter
+      DATA_SOURCE_PASS: ${POSTGRES_EXPORTER_PASSWORD}
+    networks: [data, observability]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 64M
+          pids: 64
+
+  redis-exporter:
+    profiles: [observability]
+    image: oliver006/redis_exporter:v1.74.0
+    restart: unless-stopped
+    read_only: true
+    <<: [*hardening, *logging]
+    environment:
+      REDIS_ADDR: redis://redis:6379
+      REDIS_USER: metrics
+      REDIS_PASSWORD: ${REDIS_EXPORTER_PASSWORD}
+    networks: [data, observability]
+    depends_on:
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 64M
+          pids: 64
+
+  nginx-exporter:
+    profiles: [apps]
+    image: nginx/nginx-prometheus-exporter:1.4.2
+    restart: unless-stopped
+    read_only: true
+    <<: [*hardening, *logging]
+    command: ['--nginx.scrape-uri=http://nginx:8081/stub_status']
+    networks: [observability]
+    depends_on:
+      nginx:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.10'
+          memory: 32M
+          pids: 32
+
+# ------------------------------------------------------------------------------ networks
+networks:
+  # The only network with a published application port (Nginx).
+  public:
+  # Nginx ↔ web ↔ API Gateway ↔ Keycloak. No internet access.
+  frontend:
+    internal: true
+  # API Gateway ↔ backend services ↔ Keycloak. No internet access.
+  backend:
+    internal: true
+  # Data stores and the services that own data in them. No internet access, no published ports.
+  data:
+    internal: true
+  # Outbound internet access for services that synchronise external sources.
+  egress:
+  # Prometheus scrape traffic. No internet access.
+  observability:
+    internal: true
+  # Grafana UI on 127.0.0.1:3001.
+  ops:
+
+# ------------------------------------------------------------------------------ volumes
+volumes:
+  postgres-data:
+  redis-data:
+  rabbitmq-data:
+  opensearch-data:
+  opensearch-certs:
+  opensearch-security:
+  platform-ca:
+  minio-data:
+  prometheus-data:
+  grafana-data:
