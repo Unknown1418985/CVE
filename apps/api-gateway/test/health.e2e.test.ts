@@ -1,11 +1,16 @@
 import 'reflect-metadata';
 
+import { randomUUID } from 'node:crypto';
+
 import { afterEach, describe, expect, it } from 'vitest';
+
+import { createTokenVerifier } from '@cve/auth';
 
 import { platformHealthSchema, type HealthReport } from '@cve/contracts';
 import { createLogger } from '@cve/logger';
 import { configureServiceApp } from '@cve/shared';
 import { createHttpTestApp, type HttpTestApp } from '@cve/testing';
+import { createTestTokenIssuer } from '@cve/testing/auth';
 
 import { AppModule } from '../src/app.module.js';
 import { loadGatewayEnv } from '../src/config/env.js';
@@ -24,15 +29,22 @@ function report(service: string, status: HealthReport['status']): HealthReport {
 }
 
 async function start(fetchFn: HttpFetch, env = gatewayTestEnv()): Promise<HttpTestApp> {
-  return createHttpTestApp(AppModule.register(loadGatewayEnv(env), { fetch: fetchFn }), (app) => {
-    configureServiceApp(app, {
-      service: 'api-gateway',
-      version: '0.0.0-test',
+  return createHttpTestApp(
+    AppModule.register(loadGatewayEnv(env), {
+      fetch: fetchFn,
+      sessionChecker: null,
       logger: createLogger({ service: 'api-gateway', level: 'silent' }),
-      corsAllowedOrigins: [],
-      swaggerEnabled: false,
-    });
-  });
+    }),
+    (app) => {
+      configureServiceApp(app, {
+        service: 'api-gateway',
+        version: '0.0.0-test',
+        logger: createLogger({ service: 'api-gateway', level: 'silent' }),
+        corsAllowedOrigins: [],
+        swaggerEnabled: false,
+      });
+    },
+  );
 }
 
 describe('api-gateway health', () => {
@@ -49,7 +61,7 @@ describe('api-gateway health', () => {
     expect((res.body as { data: HealthReport }).data.service).toBe('api-gateway');
   });
 
-  it('GET /api/v1/health/services aggregates backend readiness', async () => {
+  it('GET /api/v1/health/services aggregates backend readiness for authorised callers', async () => {
     const requested: string[] = [];
     const fetchFn: HttpFetch = (input) => {
       const url = input instanceof Request ? input.url : input.toString();
@@ -69,7 +81,39 @@ describe('api-gateway health', () => {
     };
 
     t = await start(fetchFn);
-    const res = await t.http.get('/api/v1/health/services').expect(200);
+    const issuer = await createTestTokenIssuer();
+    await t.close();
+    t = await createHttpTestApp(
+      AppModule.register(loadGatewayEnv(gatewayTestEnv()), {
+        fetch: fetchFn,
+        sessionChecker: null,
+        verifier: createTokenVerifier({
+          issuer: issuer.issuer,
+          audience: issuer.audience,
+          keys: issuer.getKey,
+        }),
+        logger: createLogger({ service: 'api-gateway', level: 'silent' }),
+      }),
+      (app) => {
+        configureServiceApp(app, {
+          service: 'api-gateway',
+          version: '0.0.0-test',
+          logger: createLogger({ service: 'api-gateway', level: 'silent' }),
+          corsAllowedOrigins: [],
+          swaggerEnabled: false,
+        });
+      },
+    );
+    const token = await issuer.tokenFor(randomUUID(), ['viewer']);
+    const anonymous = await t.http.get('/api/v1/health/services').expect(200);
+    const reduced = platformHealthSchema.parse((anonymous.body as { data: unknown }).data);
+    expect(reduced.services.every((s) => s.report === undefined && s.message === undefined)).toBe(
+      true,
+    );
+    const res = await t.http
+      .get('/api/v1/health/services')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
     const health = platformHealthSchema.parse((res.body as { data: unknown }).data);
 
     expect(requested).toContain('http://cve-service.internal:4000/api/v1/health/ready');

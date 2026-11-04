@@ -13,6 +13,7 @@ export default tseslint.config(
       '**/.turbo/**',
       '**/coverage/**',
       '**/next-env.d.ts',
+      '**/src/generated/**',
     ],
   },
   js.configs.recommended,
@@ -42,7 +43,12 @@ export default tseslint.config(
   {
     // NestJS modules are intentionally decorator-only classes, and constructor
     // parameter types must stay value imports for dependency injection metadata.
-    files: ['apps/api-gateway/**/*.ts', 'services/**/*.ts', 'packages/shared/**/*.ts'],
+    files: [
+      'apps/api-gateway/**/*.ts',
+      'services/**/*.ts',
+      'packages/shared/**/*.ts',
+      'packages/auth/**/*.ts',
+    ],
     rules: {
       '@typescript-eslint/no-extraneous-class': ['error', { allowWithDecorator: true }],
     },

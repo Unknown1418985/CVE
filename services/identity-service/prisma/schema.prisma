@@ -1,0 +1,105 @@
+// Identity Service schema. Owned exclusively by identity-service (database `identity_service`).
+// Credentials and identity attributes live in Keycloak; this database never stores passwords.
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// Local, non-credential profile data keyed by the stable Keycloak user ID.
+model UserProfile {
+  id             String   @id @default(uuid()) @db.Uuid
+  keycloakUserId String   @unique @map("keycloak_user_id") @db.Uuid
+  /// Last username/email seen in a token; Keycloak remains the source of truth.
+  username       String   @db.VarChar(255)
+  email          String?  @db.VarChar(320)
+  displayName    String?  @map("display_name") @db.VarChar(100)
+  jobTitle       String?  @map("job_title") @db.VarChar(100)
+  timezone       String   @default("UTC") @db.VarChar(64)
+  firstSeenAt    DateTime @default(now()) @map("first_seen_at") @db.Timestamptz(3)
+  lastSeenAt     DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(3)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([username])
+  @@map("user_profiles")
+}
+
+enum AuditOutcome {
+  success
+  failure
+  denied
+
+  @@map("audit_outcome")
+}
+
+enum AuditActorType {
+  user
+  service
+  system
+  anonymous
+
+  @@map("audit_actor_type")
+}
+
+/// Append-only audit trail. UPDATE and DELETE are rejected by a database trigger.
+model AuditEvent {
+  id            String         @id @default(uuid()) @db.Uuid
+  occurredAt    DateTime       @map("occurred_at") @db.Timestamptz(3)
+  recordedAt    DateTime       @default(now()) @map("recorded_at") @db.Timestamptz(3)
+  /// Producer of the entry: a service name or `keycloak`.
+  source        String         @db.VarChar(64)
+  /// Identifier of the entry at its source, for idempotent ingestion.
+  sourceEventId String?        @map("source_event_id") @db.VarChar(128)
+  action        String         @db.VarChar(128)
+  outcome       AuditOutcome
+  actorType     AuditActorType @map("actor_type")
+  actorId       String?        @map("actor_id") @db.VarChar(128)
+  actorUsername String?        @map("actor_username") @db.VarChar(255)
+  resourceType  String?        @map("resource_type") @db.VarChar(64)
+  resourceId    String?        @map("resource_id") @db.VarChar(128)
+  ipAddress     String?        @map("ip_address") @db.VarChar(64)
+  userAgent     String?        @map("user_agent") @db.VarChar(512)
+  correlationId String?        @map("correlation_id") @db.VarChar(128)
+  details       Json?
+
+  @@unique([source, sourceEventId])
+  @@index([occurredAt(sort: Desc)])
+  @@index([actorId, occurredAt(sort: Desc)])
+  @@index([action, occurredAt(sort: Desc)])
+  @@index([resourceType, resourceId])
+  @@map("audit_events")
+}
+
+/// Transactional outbox for domain events (published by OutboxRelay).
+model OutboxEvent {
+  id            String    @id @default(uuid()) @db.Uuid
+  eventId       String    @unique @map("event_id") @db.Uuid
+  eventType     String    @map("event_type") @db.VarChar(128)
+  envelope      Json
+  attempts      Int       @default(0)
+  lastError     String?   @map("last_error") @db.VarChar(2000)
+  nextAttemptAt DateTime  @default(now()) @map("next_attempt_at") @db.Timestamptz(3)
+  lockedUntil   DateTime? @map("locked_until") @db.Timestamptz(3)
+  publishedAt   DateTime? @map("published_at") @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([publishedAt, nextAttemptAt])
+  @@map("outbox_events")
+}
+
+/// Cursor for incremental ingestion of Keycloak login/admin events into the audit log.
+model SyncCursor {
+  name        String   @id @db.VarChar(64)
+  /// Epoch milliseconds of the newest event already ingested.
+  position    BigInt
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("sync_cursors")
+}

@@ -1,0 +1,19 @@
+import { createNodeVitestConfig } from '@cve/testing/vitest';
+import { loadRootEnvFile } from '@cve/testing/integration';
+import { defineConfig } from 'vitest/config';
+
+loadRootEnvFile(import.meta.dirname);
+
+const base = createNodeVitestConfig({
+  decorators: true,
+  include: ['test/integration/**/*.test.ts'],
+});
+
+/**
+ * Live tests against PostgreSQL and Keycloak from `docker compose -f compose.yaml -f
+ * compose.dev.yaml up -d postgres keycloak` (see docs/identity.md).
+ */
+export default defineConfig({
+  ...base,
+  test: { ...base.test, testTimeout: 60_000, hookTimeout: 120_000, fileParallelism: false },
+});

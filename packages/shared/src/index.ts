@@ -8,4 +8,6 @@ export * from './health/health.service.js';
 export * from './health/health.types.js';
 export * from './http/api-exception.filter.js';
 export * from './http/correlation-id.js';
+export * from './http/public.decorator.js';
+export * from './http/zod-validation.js';
 export * from './metrics/metrics.js';

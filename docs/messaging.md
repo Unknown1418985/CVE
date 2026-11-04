@@ -146,9 +146,11 @@ await worker.start();
 
 `createRedisHealthIndicator(redis)` reports `PING` latency for the health module.
 
-## Not wired into the services yet
+## Where it is used
 
-The packages are complete and tested against live brokers, but the service skeletons do not open
-RabbitMQ or Redis connections yet: the first producers, consumers and jobs (and the protocol-level
-health indicators that replace today's TCP checks) are added with the features that need them,
-starting in Phase 2.
+- **Identity Service** (Phase 1): `PrismaOutboxStore` + `OutboxRelay` publish `identity.user.roles-changed`,
+  `identity.user.status-changed` and `identity.session.revoked` (payload schemas in
+  `@cve/contracts`), and a BullMQ scheduler ingests Keycloak events into the audit log every minute.
+  Its readiness check uses the AMQP connection and Redis `PING`.
+- The other services do not open RabbitMQ or Redis connections yet; their first producers,
+  consumers and jobs arrive with their features, starting in Phase 2.

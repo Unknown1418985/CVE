@@ -2,6 +2,8 @@ export * from './api.js';
 export * from './events.js';
 export * from './health.js';
 export * from './http.js';
+export * from './identity.js';
+export * from './permissions.js';
 export * from './roles.js';
 export * from './services.js';
 export * from './storage.js';

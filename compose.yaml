@@ -438,11 +438,48 @@ services:
       EXPLOIT_SERVICE_URL: http://exploit-service:4007
       REPORTING_SERVICE_URL: http://reporting-service:4008
       NOTIFICATION_SERVICE_URL: http://notification-service:4009
+      # Tokens are validated against the realm JWKS fetched over the internal network; the
+      # issuer is the public URL browsers use. Introspection confirms sessions are still active.
+      KEYCLOAK_URL: http://keycloak:8180/auth
+      KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8080/auth}
+      KEYCLOAK_INTROSPECTION_CLIENT_SECRET: ${KEYCLOAK_API_CLIENT_SECRET:?required}
     # The gateway owns no data store: it only reaches the web tier and the backend services.
     networks: [frontend, backend, observability]
+    depends_on:
+      keycloak:
+        condition: service_healthy
+
+  # Applies the Identity Service's Prisma migrations, then exits.
+  identity-service-migrate:
+    profiles: [apps]
+    image: cve-platform/identity-service:local
+    build:
+      context: .
+      dockerfile: infra/docker/node-service.Dockerfile
+      args:
+        PACKAGE: '@cve/identity-service'
+    restart: 'no'
+    read_only: true
+    tmpfs:
+      - /tmp
+    <<: [*hardening, *logging]
+    command: ['node', 'node_modules/prisma/build/index.js', 'migrate', 'deploy']
+    environment:
+      DATABASE_URL: postgresql://identity_service:${IDENTITY_SERVICE_DB_PASSWORD}@postgres:5432/identity_service
+    networks: [data]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+          pids: 128
 
   identity-service:
     <<: *backend-service
+    image: cve-platform/identity-service:local
     build:
       context: .
       dockerfile: infra/docker/node-service.Dockerfile
@@ -454,7 +491,16 @@ services:
       DATABASE_URL: postgresql://identity_service:${IDENTITY_SERVICE_DB_PASSWORD}@postgres:5432/identity_service
       REDIS_URL: redis://identity-service:${IDENTITY_SERVICE_REDIS_PASSWORD}@redis:6379
       RABBITMQ_URL: amqp://identity-service:${IDENTITY_SERVICE_RABBITMQ_PASSWORD}@rabbitmq:5672/cve
-    depends_on: *backend-depends
+      KEYCLOAK_URL: http://keycloak:8180/auth
+      KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8080/auth}
+      KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_IDENTITY_SERVICE_CLIENT_SECRET:?required}
+      ACCOUNT_REDIRECT_URI: ${PUBLIC_ORIGIN:-http://localhost:8080}/settings
+    depends_on:
+      <<: *backend-depends
+      keycloak:
+        condition: service_healthy
+      identity-service-migrate:
+        condition: service_completed_successfully
 
   cve-service:
     <<: *backend-service

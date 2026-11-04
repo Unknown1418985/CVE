@@ -6,15 +6,19 @@ Public entry point of the platform. All public endpoints are served under `/api/
 - Default port: `4000`
 - Owns no database.
 
-## Current status (Phase 0)
+## Current status (Phase 1)
 
-- Configuration validation (all backend service URLs are required and must be HTTP(S)).
-- Global rate limiting (`@nestjs/throttler`, in-memory store; a Redis store is required before
-  running more than one gateway replica).
+- Keycloak access-token validation on every non-public route, Keycloak session introspection
+  (cached 15 s, fail closed) and coarse permission checks before forwarding.
+- Per-user rate limiting (per IP when anonymous; in-memory store, so a Redis store is required
+  before running more than one gateway replica); stricter limit on logout.
+- Forwards the Identity Service routes (`/me`, `/auth/logout`, `/users`, `/roles`, `/permissions`,
+  `/audit-logs`) with the original bearer token; refuses dot segments and non-JSON bodies.
 - Security headers, strict CORS, correlation IDs, error envelope, optional OpenAPI UI.
-- Health endpoints, including aggregated platform health.
+- Health endpoints, including aggregated platform health (details only with
+  `platform-health:read`).
 
-Routing of business endpoints to backend services is added together with each feature.
+See [docs/identity.md](../../docs/identity.md).
 
 ## Endpoints
 
@@ -34,5 +38,6 @@ Routing of business endpoints to backend services is added together with each fe
 | `PORT`                                                                        | no       | `4000`            |
 | `RATE_LIMIT_TTL_MS`                                                           | no       | `60000`           |
 | `RATE_LIMIT_MAX`                                                              | no       | `300`             |
+| `KEYCLOAK_URL`, `KEYCLOAK_PUBLIC_URL`, `KEYCLOAK_INTROSPECTION_CLIENT_SECRET` | yes      | see identity.md   |
 | `CORS_ALLOWED_ORIGINS`                                                        | no       | none              |
 | `SWAGGER_ENABLED`, `LOG_LEVEL`, `NODE_ENV`, `HOST`, `HEALTH_CHECK_TIMEOUT_MS` | no       | see `@cve/config` |

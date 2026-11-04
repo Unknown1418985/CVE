@@ -42,6 +42,7 @@ export const DEV_HOST_PORTS = {
   rabbitmq: 5672,
   minio: 9000,
   opensearch: 9200,
+  keycloak: 8180,
 } as const;
 
 const OBJECT_STORAGE_SERVICES: readonly BackendServiceName[] = [
@@ -94,14 +95,28 @@ export function renderDevEnvFiles(values: Map<string, string>): Record<string, s
         'OPENSEARCH_CA_FILE=../../.certs/platform-ca.pem',
       );
     }
+    if (service === 'identity-service') {
+      lines.push(
+        `KEYCLOAK_URL=http://localhost:${DEV_HOST_PORTS.keycloak}/auth`,
+        `KEYCLOAK_PUBLIC_URL=http://localhost:${DEV_HOST_PORTS.keycloak}/auth`,
+        `KEYCLOAK_ADMIN_CLIENT_SECRET=${required(values, 'KEYCLOAK_IDENTITY_SERVICE_CLIENT_SECRET')}`,
+        'ACCOUNT_REDIRECT_URI=http://localhost:3000/settings',
+      );
+    }
     files[`services/${service}/.env`] = `${header}${lines.join('\n')}\n`;
   }
 
   files['apps/api-gateway/.env'] =
     header +
-    BACKEND_SERVICE_NAMES.map(
-      (service) => `${snake(service)}_URL=http://localhost:${SERVICE_DEFAULT_PORTS[service]}`,
-    ).join('\n') +
+    [
+      ...BACKEND_SERVICE_NAMES.map(
+        (service) => `${snake(service)}_URL=http://localhost:${SERVICE_DEFAULT_PORTS[service]}`,
+      ),
+      // compose.dev.yaml sets KC_HOSTNAME to this address, so it is also the token issuer.
+      `KEYCLOAK_URL=http://localhost:${DEV_HOST_PORTS.keycloak}/auth`,
+      `KEYCLOAK_PUBLIC_URL=http://localhost:${DEV_HOST_PORTS.keycloak}/auth`,
+      `KEYCLOAK_INTROSPECTION_CLIENT_SECRET=${required(values, 'KEYCLOAK_API_CLIENT_SECRET')}`,
+    ].join('\n') +
     '\n';
   return files;
 }

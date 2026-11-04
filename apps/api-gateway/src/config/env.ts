@@ -1,5 +1,6 @@
 import {
   baseServiceEnvSchema,
+  booleanStringSchema,
   httpUrlSchema,
   loadEnv,
   portSchema,
@@ -40,10 +41,41 @@ const serviceUrlShape = {
 export const envSchema = baseServiceEnvSchema
   .extend({
     PORT: portSchema.default(SERVICE_DEFAULT_PORTS[SERVICE_NAME]),
+    /** Requests per window, per authenticated user (or per client IP when anonymous). */
     RATE_LIMIT_TTL_MS: z.coerce.number().int().min(1_000).default(DEFAULT_RATE_LIMIT.ttlMs),
     RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(DEFAULT_RATE_LIMIT.limit),
+    /** Internal Keycloak base URL, e.g. `http://keycloak:8180/auth` (JWKS, introspection). */
+    KEYCLOAK_URL: httpUrlSchema,
+    /** Public Keycloak base URL; defines the expected token issuer. */
+    KEYCLOAK_PUBLIC_URL: httpUrlSchema,
+    KEYCLOAK_REALM: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{1,64}$/)
+      .default('cve-platform'),
+    KEYCLOAK_AUDIENCE: z.string().min(1).default('cve-api'),
+    KEYCLOAK_TIMEOUT_MS: z.coerce.number().int().min(500).max(30_000).default(5_000),
+    /**
+     * Confirms on every request (cached briefly per session) that the Keycloak session behind a
+     * token is still active, so logout and revocation apply before the access token expires.
+     */
+    AUTH_SESSION_CHECK_ENABLED: booleanStringSchema.default(true),
+    AUTH_SESSION_CACHE_TTL_MS: z.coerce.number().int().min(1_000).max(60_000).default(15_000),
+    /** Confidential resource-server client used for token introspection. */
+    KEYCLOAK_INTROSPECTION_CLIENT_ID: z.string().min(1).default('cve-api'),
+    KEYCLOAK_INTROSPECTION_CLIENT_SECRET: z.string().min(16).optional(),
+    /** Timeout for requests forwarded to backend services. */
+    PROXY_TIMEOUT_MS: z.coerce.number().int().min(500).max(120_000).default(15_000),
   })
-  .extend(serviceUrlShape);
+  .extend(serviceUrlShape)
+  .superRefine((env, context) => {
+    if (env.AUTH_SESSION_CHECK_ENABLED && env.KEYCLOAK_INTROSPECTION_CLIENT_SECRET === undefined) {
+      context.addIssue({
+        code: 'custom',
+        path: ['KEYCLOAK_INTROSPECTION_CLIENT_SECRET'],
+        message: 'is required while AUTH_SESSION_CHECK_ENABLED=true',
+      });
+    }
+  });
 
 export type Env = z.infer<typeof envSchema>;
 

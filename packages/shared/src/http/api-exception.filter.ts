@@ -18,6 +18,15 @@ export function errorCodeForStatus(status: number): string {
   return name ?? (status >= 500 ? 'INTERNAL_SERVER_ERROR' : 'HTTP_ERROR');
 }
 
+function isErrorDetail(value: unknown): value is ApiErrorDetail {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { path?: unknown }).path === 'string' &&
+    typeof (value as { message?: unknown }).message === 'string'
+  );
+}
+
 function extractMessage(exception: HttpException): {
   message: string;
   details?: ApiErrorDetail[];
@@ -33,7 +42,14 @@ function extractMessage(exception: HttpException): {
         details: messages.map((message) => ({ path: '', message })),
       };
     }
-    if (typeof body.message === 'string') return { message: body.message };
+    if (typeof body.message === 'string') {
+      const details = Array.isArray(body.details)
+        ? body.details.filter(isErrorDetail).map(({ path, message }) => ({ path, message }))
+        : undefined;
+      return details && details.length > 0
+        ? { message: body.message, details }
+        : { message: body.message };
+    }
   }
   return { message: exception.message };
 }

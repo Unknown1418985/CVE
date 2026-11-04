@@ -6,6 +6,8 @@ packages:
 
 # Only allow dependency build scripts that are explicitly trusted.
 onlyBuiltDependencies:
+  - '@prisma/engines'
   - '@swc/core'
   - esbuild
+  - prisma
   - sharp

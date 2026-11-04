@@ -95,4 +95,38 @@ describe.runIf(devPorts)('Keycloak realm', () => {
     );
     expect((await tokenFor('wrong-secret')).status).toBe(401);
   });
+
+  it('defines the client scopes every access token depends on', async () => {
+    const token = await adminToken();
+    // A realm import only creates the scopes it lists, so the built-in ones must be in the file.
+    const scopes = await adminGet<{ name: string }[]>('/client-scopes', token);
+    expect(scopes.map((scope) => scope.name)).toEqual(
+      expect.arrayContaining(['basic', 'profile', 'email', 'web-origins', 'cve-api']),
+    );
+    const [web] = await adminGet<{ id: string }[]>('/clients?clientId=cve-web', token);
+    const defaults = await adminGet<{ name: string }[]>(
+      `/clients/${web?.id ?? ''}/default-client-scopes`,
+      token,
+    );
+    expect(defaults.map((scope) => scope.name).sort()).toEqual(
+      ['basic', 'cve-api', 'email', 'profile', 'web-origins'].sort(),
+    );
+  });
+
+  it('lets the Identity Service read login events', async () => {
+    const response = await fetch(`${base}/realms/${realm}/protocol/openid-connect/token`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'client_credentials',
+        client_id: 'cve-identity-service',
+        client_secret: requireEnv('KEYCLOAK_IDENTITY_SERVICE_CLIENT_SECRET'),
+      }),
+    });
+    const { access_token: serviceToken } = (await response.json()) as { access_token: string };
+    const events = await fetch(`${base}/admin/realms/${realm}/events?max=1`, {
+      headers: { authorization: `Bearer ${serviceToken}` },
+    });
+    expect(events.status).toBe(200);
+  });
 });

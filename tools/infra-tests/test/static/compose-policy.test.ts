@@ -45,7 +45,12 @@ const networksOf = (service: ComposeService): string[] =>
   Array.isArray(service.networks) ? service.networks : Object.keys(service.networks ?? {});
 
 /** One-shot jobs that exit after provisioning. */
-const JOBS = new Set(['opensearch-init', 'minio-init', 'infra-provisioner']);
+const JOBS = new Set([
+  'opensearch-init',
+  'minio-init',
+  'infra-provisioner',
+  'identity-service-migrate',
+]);
 const DATA_STORES = ['postgres', 'redis', 'rabbitmq', 'opensearch', 'minio'];
 const EGRESS_ALLOWED = new Set([
   'intelligence-service',

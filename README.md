@@ -4,9 +4,11 @@ A self-hosted platform for vulnerability intelligence, exploit tracking, control
 Proof-of-Concept collection and reporting. Everything is written in TypeScript and organised as a
 pnpm + Turborepo monorepo of independently deployable services.
 
-> **Status: Phase 0 (foundation).** The repository contains the monorepo, shared packages, service
-> skeletons with health endpoints, the web shell and the local infrastructure stack. No business
-> features exist yet. See [Roadmap](#roadmap) and [`CLAUDE.md`](CLAUDE.md) for the full specification.
+> **Status: Phase 1 (authentication, authorization, audit logging).** Keycloak login, JWT
+> validation, RBAC guards, the Identity Service (profiles, sessions, secure logout, user and role
+> administration, audit log) and gateway authentication with per-user rate limiting are
+> implemented. Web login and all CVE features are not built yet. See [Roadmap](#roadmap),
+> [docs/identity.md](docs/identity.md) and [`CLAUDE.md`](CLAUDE.md).
 
 ## Repository layout
 
@@ -25,7 +27,8 @@ services/
   reporting-service/      Dashboards, analytics, reports
   notification-service/   Notifications
 packages/
-  contracts/              Zod schemas: API envelopes, pagination, health, events, roles, service registry
+  contracts/              Zod schemas: API envelopes, pagination, health, events, roles, permissions, identity API
+  auth/                   Keycloak JWT validation, session introspection, NestJS authentication/RBAC guards
   config/                 Environment variable schemas and fail-fast validation
   logger/                 Pino structured logging with redaction + NestJS adapter
   security/               Security headers (helmet), strict CORS, correlation IDs, rate-limit defaults
@@ -98,7 +101,8 @@ Every NestJS service exposes:
 | `/api/v1/health`       | Same as readiness                                      |
 
 The API Gateway also exposes `/api/v1/health/services`, which aggregates the readiness of every
-backend service. The web app exposes `/api/health`. Default ports: gateway `4000`, services
+backend service (status only for anonymous callers). Every other endpoint requires a Keycloak
+access token; see [docs/identity.md](docs/identity.md). The web app exposes `/api/health`. Default ports: gateway `4000`, services
 `4001`–`4009` (see `packages/contracts/src/services.ts`), web `3000`.
 
 ## Workspace scripts
@@ -123,20 +127,21 @@ Run a single workspace with `pnpm --filter @cve/<name> <script>`.
 - [Architecture](docs/architecture.md)
 - [Infrastructure](docs/infrastructure.md)
 - [Messaging and background jobs](docs/messaging.md)
+- [Identity, authentication and authorization](docs/identity.md)
 - [Development specification](CLAUDE.md)
 
 ## Roadmap
 
-| Phase | Scope                                                | Status      |
-| ----- | ---------------------------------------------------- | ----------- |
-| 0     | Monorepo and infrastructure foundation               | In progress |
-| 1     | Authentication, authorization, audit logging         | Planned     |
-| 2     | CVE Service and database                             | Planned     |
-| 3     | NVD, MITRE, CISA and EPSS integrations               | Planned     |
-| 4     | Asset and product intelligence                       | Planned     |
-| 5     | PoC discovery and metadata management                | Planned     |
-| 6     | Secure automated downloads and MinIO storage         | Planned     |
-| 7     | Exploit intelligence                                 | Planned     |
-| 8     | Dashboard and analytics                              | Planned     |
-| 9     | Reporting and notifications                          | Planned     |
-| 10    | Production hardening, backup, monitoring, deployment | Planned     |
+| Phase | Scope                                                | Status     |
+| ----- | ---------------------------------------------------- | ---------- |
+| 0     | Monorepo and infrastructure foundation               | Done       |
+| 1     | Authentication, authorization, audit logging         | Done (API) |
+| 2     | CVE Service and database                             | Planned    |
+| 3     | NVD, MITRE, CISA and EPSS integrations               | Planned    |
+| 4     | Asset and product intelligence                       | Planned    |
+| 5     | PoC discovery and metadata management                | Planned    |
+| 6     | Secure automated downloads and MinIO storage         | Planned    |
+| 7     | Exploit intelligence                                 | Planned    |
+| 8     | Dashboard and analytics                              | Planned    |
+| 9     | Reporting and notifications                          | Planned    |
+| 10    | Production hardening, backup, monitoring, deployment | Planned    |

@@ -32,6 +32,8 @@ describe('renderDevEnvFiles', () => {
     'DOWNLOAD_SERVICE_MINIO_SECRET_KEY',
     'POC_SERVICE_MINIO_SECRET_KEY',
     'REPORTING_SERVICE_MINIO_SECRET_KEY',
+    'KEYCLOAK_API_CLIENT_SECRET',
+    'KEYCLOAK_IDENTITY_SERVICE_CLIENT_SECRET',
     ...[
       'IDENTITY',
       'CVE',
@@ -67,6 +69,14 @@ describe('renderDevEnvFiles', () => {
     expect(files['services/download-service/.env']).toContain('S3_ACCESS_KEY_ID=download-service');
     expect(files['services/asset-service/.env']).not.toContain('S3_');
     expect(files['apps/api-gateway/.env']).toContain('CVE_SERVICE_URL=http://localhost:4002');
+    expect(files['apps/api-gateway/.env']).toContain(
+      `KEYCLOAK_INTROSPECTION_CLIENT_SECRET=${values.get('KEYCLOAK_API_CLIENT_SECRET') ?? ''}`,
+    );
+    const identity = files['services/identity-service/.env'] ?? '';
+    expect(identity).toContain(
+      `KEYCLOAK_ADMIN_CLIENT_SECRET=${values.get('KEYCLOAK_IDENTITY_SERVICE_CLIENT_SECRET') ?? ''}`,
+    );
+    expect(cve).not.toContain('KEYCLOAK_');
   });
 
   it('refuses placeholders', () => {

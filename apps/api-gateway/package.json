@@ -16,6 +16,7 @@
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
+    "@cve/auth": "workspace:*",
     "@cve/config": "workspace:*",
     "@cve/contracts": "workspace:*",
     "@cve/logger": "workspace:*",
