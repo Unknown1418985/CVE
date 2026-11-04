@@ -1,0 +1,10 @@
+packages:
+  - 'apps/*'
+  - 'services/*'
+  - 'packages/*'
+
+# Only allow dependency build scripts that are explicitly trusted.
+onlyBuiltDependencies:
+  - '@swc/core'
+  - esbuild
+  - sharp
