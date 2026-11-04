@@ -11,6 +11,7 @@ import { UserThrottlerGuard } from './auth/user-throttler.guard.js';
 import { serviceRegistryFromEnv, type Env } from './config/env.js';
 import { CveProxyController } from './proxy/cve-proxy.controller.js';
 import { IdentityProxyController } from './proxy/identity-proxy.controller.js';
+import { IntelligenceProxyController } from './proxy/intelligence-proxy.controller.js';
 import { PROXY_OPTIONS } from './proxy/proxy.constants.js';
 import { ProxyService, type ProxyOptions } from './proxy/proxy.service.js';
 import { SERVICE_NAME, SERVICE_VERSION } from './service.js';
@@ -77,7 +78,7 @@ export class AppModule {
           fetch: fetchFn,
         }),
       ],
-      controllers: [IdentityProxyController, CveProxyController],
+      controllers: [IdentityProxyController, CveProxyController, IntelligenceProxyController],
       providers: [
         { provide: PROXY_OPTIONS, useValue: proxyOptions },
         ProxyService,

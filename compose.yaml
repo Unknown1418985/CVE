@@ -562,8 +562,37 @@ services:
       cve-service-migrate:
         condition: service_completed_successfully
 
+  # Applies the Intelligence Service's Prisma migrations, then exits.
+  intelligence-service-migrate:
+    profiles: [apps]
+    image: cve-platform/intelligence-service:local
+    build:
+      context: .
+      dockerfile: infra/docker/node-service.Dockerfile
+      args:
+        PACKAGE: '@cve/intelligence-service'
+    restart: 'no'
+    read_only: true
+    tmpfs:
+      - /tmp
+    <<: [*hardening, *logging]
+    command: ['node', 'node_modules/prisma/build/index.js', 'migrate', 'deploy']
+    environment:
+      DATABASE_URL: postgresql://intelligence_service:${INTELLIGENCE_SERVICE_DB_PASSWORD}@postgres:5432/intelligence_service
+    networks: [data]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+          pids: 128
+
   intelligence-service:
     <<: *backend-service
+    image: cve-platform/intelligence-service:local
     build:
       context: .
       dockerfile: infra/docker/node-service.Dockerfile
@@ -575,9 +604,20 @@ services:
       DATABASE_URL: postgresql://intelligence_service:${INTELLIGENCE_SERVICE_DB_PASSWORD}@postgres:5432/intelligence_service
       REDIS_URL: redis://intelligence-service:${INTELLIGENCE_SERVICE_REDIS_PASSWORD}@redis:6379
       RABBITMQ_URL: amqp://intelligence-service:${INTELLIGENCE_SERVICE_RABBITMQ_PASSWORD}@rabbitmq:5672/cve
-    # Synchronises NVD, MITRE, CISA KEV and EPSS: needs outbound internet access.
+      # Tokens are validated against the realm JWKS (internal URL); the issuer is the public URL.
+      KEYCLOAK_URL: http://keycloak:8180/auth
+      KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8080/auth}
+      # Optional source credentials (higher quotas). Empty means "not configured".
+      NVD_API_KEY: ${NVD_API_KEY:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+    # Synchronises NVD, MITRE CVE, CISA KEV, FIRST EPSS and GitHub: needs outbound internet access.
     networks: [backend, data, observability, egress]
-    depends_on: *backend-depends
+    depends_on:
+      <<: *backend-depends
+      keycloak:
+        condition: service_healthy
+      intelligence-service-migrate:
+        condition: service_completed_successfully
 
   asset-service:
     <<: *backend-service

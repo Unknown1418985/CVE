@@ -97,6 +97,17 @@ export function renderDevEnvFiles(values: Map<string, string>): Record<string, s
         `KEYCLOAK_PUBLIC_URL=http://localhost:${DEV_HOST_PORTS.keycloak}/auth`,
       );
     }
+    if (service === 'intelligence-service') {
+      lines.push(
+        `KEYCLOAK_URL=http://localhost:${DEV_HOST_PORTS.keycloak}/auth`,
+        `KEYCLOAK_PUBLIC_URL=http://localhost:${DEV_HOST_PORTS.keycloak}/auth`,
+      );
+      // Optional source credentials are copied only when set.
+      for (const key of ['NVD_API_KEY', 'GITHUB_TOKEN']) {
+        const value = values.get(key);
+        if (value !== undefined && value !== '') lines.push(`${key}=${value}`);
+      }
+    }
     if (service === 'identity-service') {
       lines.push(
         `KEYCLOAK_URL=http://localhost:${DEV_HOST_PORTS.keycloak}/auth`,

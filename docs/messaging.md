@@ -154,5 +154,9 @@ await worker.start();
 - **CVE Service** (Phase 2): `PrismaOutboxStore` + `OutboxRelay` publish `cve.record.created`,
   `cve.record.updated` and `cve.record.deleted` (payload schemas in `@cve/contracts`, see
   [cve-service.md](cve-service.md)). It uses no BullMQ jobs yet.
+- **Intelligence Service** (Phase 3): `PrismaOutboxStore` + `OutboxRelay` publish the
+  `intelligence.*` observation, KEV, EPSS and sync-run events, and BullMQ job schedulers run each
+  source on its cron plus a maintenance job that recovers abandoned runs (see
+  [intelligence-service.md](intelligence-service.md)). No service consumes these events yet.
 - The other services do not open RabbitMQ or Redis connections yet; their first producers,
   consumers and jobs arrive with their features.

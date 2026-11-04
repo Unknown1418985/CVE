@@ -292,6 +292,29 @@ describe('rate limiting', () => {
   });
 });
 
+describe('Intelligence Service routes', () => {
+  it('requires data-source:read to read and data-source:manage to queue runs', async () => {
+    const app = await start(backend(ok));
+    const viewer = await issuer.tokenFor(randomUUID(), ['viewer']);
+    const analyst = await issuer.tokenFor(randomUUID(), ['security-analyst']);
+    const admin = await issuer.tokenFor(randomUUID(), ['administrator']);
+
+    await app.http.get('/api/v1/sources').expect(401);
+    await app.http.get('/api/v1/sources').set(bearer(viewer)).expect(403);
+    await app.http.get('/api/v1/sources/nvd').set(bearer(analyst)).expect(200);
+    await app.http.get('/api/v1/sync-runs?source=nvd').set(bearer(analyst)).expect(200);
+    await app.http.post('/api/v1/sources/nvd/sync').set(bearer(analyst)).send({}).expect(403);
+    await app.http.post('/api/v1/sources/nvd/sync').set(bearer(admin)).send({}).expect(200);
+    await app.http.delete('/api/v1/sources/nvd').set(bearer(admin)).expect(404);
+
+    expect(forwarded.map((request) => `${request.method} ${request.url}`)).toEqual([
+      'GET http://intelligence-service.internal:4000/api/v1/sources/nvd',
+      'GET http://intelligence-service.internal:4000/api/v1/sync-runs?source=nvd',
+      'POST http://intelligence-service.internal:4000/api/v1/sources/nvd/sync',
+    ]);
+  });
+});
+
 describe('CVE Service routes', () => {
   it('requires cve:read to read and cve:manage to write', async () => {
     const app = await start(backend(ok));
