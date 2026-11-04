@@ -1,0 +1,43 @@
+{
+  "name": "@cve/intelligence-service",
+  "version": "0.1.0",
+  "private": true,
+  "description": "External intelligence adapters (NVD, MITRE CVE, CISA KEV, EPSS, GitHub, Exploit-DB) and synchronisation.",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc-watch -p tsconfig.build.json --onSuccess \"node --env-file-if-exists=../../.env --env-file-if-exists=.env dist/main.js\"",
+    "start": "node dist/main.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "clean": "rm -rf dist .turbo"
+  },
+  "dependencies": {
+    "@cve/config": "workspace:*",
+    "@cve/contracts": "workspace:*",
+    "@cve/database": "workspace:*",
+    "@cve/logger": "workspace:*",
+    "@cve/shared": "workspace:*",
+    "@nestjs/common": "^12.3.2",
+    "@nestjs/core": "^12.3.2",
+    "@nestjs/platform-express": "^12.3.2",
+    "@nestjs/swagger": "^12.1.0",
+    "express": "^5.3.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@cve/testing": "workspace:*",
+    "@nestjs/testing": "^12.3.2",
+    "@types/express": "^5.0.6",
+    "@types/node": "^24.0.0",
+    "@types/supertest": "^7.2.1",
+    "tsc-watch": "^7.2.1",
+    "typescript": "~6.0.3",
+    "vitest": "^5.1.0"
+  }
+}

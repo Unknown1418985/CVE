@@ -1,0 +1,441 @@
+# CVE Intelligence Platform — local Docker Compose stack.
+#
+#   docker compose up -d                          # infrastructure only (run apps with `pnpm dev`)
+#   docker compose --profile apps up -d --build   # infrastructure + all application containers
+#   docker compose --profile observability up -d  # add Prometheus and Grafana
+#
+# Secrets come from `.env` (copy `.env.example` and replace every `change-me` value).
+# Infrastructure ports are bound to 127.0.0.1 only.
+
+name: cve-platform
+
+x-limits-small: &limits-small
+  deploy:
+    resources:
+      limits:
+        cpus: '0.50'
+        memory: 256M
+
+x-node-healthcheck: &node-healthcheck
+  healthcheck:
+    test:
+      - CMD
+      - node
+      - -e
+      - "fetch('http://127.0.0.1:'+process.env.PORT+'/api/v1/health/live').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
+    interval: 15s
+    timeout: 5s
+    retries: 5
+    start_period: 20s
+
+x-backend-env: &backend-env
+  NODE_ENV: production
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  HOST: 0.0.0.0
+  SWAGGER_ENABLED: ${SWAGGER_ENABLED:-false}
+  REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379
+  RABBITMQ_URL: amqp://${RABBITMQ_USER:?RABBITMQ_USER is required}:${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD is required}@rabbitmq:5672
+
+x-backend-service: &backend-service
+  profiles: [apps]
+  restart: unless-stopped
+  read_only: true
+  tmpfs:
+    - /tmp
+  security_opt:
+    - no-new-privileges:true
+  cap_drop: [ALL]
+  <<: [*limits-small, *node-healthcheck]
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
+
+services:
+  # ---------------------------------------------------------------- infrastructure
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_SUPERUSER:?POSTGRES_SUPERUSER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?POSTGRES_SUPERUSER_PASSWORD is required}
+      POSTGRES_DB: postgres
+      IDENTITY_SERVICE_DB_PASSWORD: ${IDENTITY_SERVICE_DB_PASSWORD:?required}
+      CVE_SERVICE_DB_PASSWORD: ${CVE_SERVICE_DB_PASSWORD:?required}
+      INTELLIGENCE_SERVICE_DB_PASSWORD: ${INTELLIGENCE_SERVICE_DB_PASSWORD:?required}
+      ASSET_SERVICE_DB_PASSWORD: ${ASSET_SERVICE_DB_PASSWORD:?required}
+      POC_SERVICE_DB_PASSWORD: ${POC_SERVICE_DB_PASSWORD:?required}
+      DOWNLOAD_SERVICE_DB_PASSWORD: ${DOWNLOAD_SERVICE_DB_PASSWORD:?required}
+      EXPLOIT_SERVICE_DB_PASSWORD: ${EXPLOIT_SERVICE_DB_PASSWORD:?required}
+      REPORTING_SERVICE_DB_PASSWORD: ${REPORTING_SERVICE_DB_PASSWORD:?required}
+      NOTIFICATION_SERVICE_DB_PASSWORD: ${NOTIFICATION_SERVICE_DB_PASSWORD:?required}
+      KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?required}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - '127.0.0.1:5432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d postgres']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 1G
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --requirepass
+      - ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      - --appendonly
+      - 'yes'
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
+    volumes:
+      - redis-data:/data
+    ports:
+      - '127.0.0.1:6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+
+  rabbitmq:
+    image: rabbitmq:4.1-management-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    ports:
+      - '127.0.0.1:5672:5672'
+      - '127.0.0.1:15672:15672'
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 1G
+
+  opensearch:
+    image: opensearchproject/opensearch:2.19.1
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      bootstrap.memory_lock: 'true'
+      OPENSEARCH_JAVA_OPTS: -Xms512m -Xmx512m
+      OPENSEARCH_INITIAL_ADMIN_PASSWORD: ${OPENSEARCH_ADMIN_PASSWORD:?OPENSEARCH_ADMIN_PASSWORD is required}
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    ports:
+      - '127.0.0.1:9200:9200'
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -sk -u "admin:$${OPENSEARCH_INITIAL_ADMIN_PASSWORD}" https://localhost:9200/_cluster/health | grep -qE '"status":"(green|yellow)"'
+      interval: 20s
+      timeout: 10s
+      retries: 15
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 1536M
+
+  minio:
+    # The upstream project no longer publishes images on Docker Hub; override MINIO_IMAGE with the
+    # image your organisation trusts (see docs/infrastructure.md).
+    image: ${MINIO_IMAGE:-pgsty/minio:RELEASE.2026-08-04T00-00-00Z}
+    restart: unless-stopped
+    command: ['server', '/data', '--console-address', ':9001']
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+    volumes:
+      - minio-data:/data
+    ports:
+      - '127.0.0.1:9000:9000'
+      - '127.0.0.1:9001:9001'
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+
+  keycloak:
+    image: keycloak/keycloak:26.4
+    restart: unless-stopped
+    command: ['start-dev']
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER:?KEYCLOAK_ADMIN_USER is required}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD is required}
+      KC_HEALTH_ENABLED: 'true'
+      KC_HTTP_PORT: '8180'
+    ports:
+      - '127.0.0.1:8180:8180'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 1G
+
+  # ---------------------------------------------------------------- applications
+  api-gateway:
+    <<: *backend-service
+    build:
+      context: .
+      dockerfile: infra/docker/node-service.Dockerfile
+      args:
+        PACKAGE: '@cve/api-gateway'
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      HOST: 0.0.0.0
+      PORT: 4000
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-false}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+      IDENTITY_SERVICE_URL: http://identity-service:4001
+      CVE_SERVICE_URL: http://cve-service:4002
+      INTELLIGENCE_SERVICE_URL: http://intelligence-service:4003
+      ASSET_SERVICE_URL: http://asset-service:4004
+      POC_SERVICE_URL: http://poc-service:4005
+      DOWNLOAD_SERVICE_URL: http://download-service:4006
+      EXPLOIT_SERVICE_URL: http://exploit-service:4007
+      REPORTING_SERVICE_URL: http://reporting-service:4008
+      NOTIFICATION_SERVICE_URL: http://notification-service:4009
+    depends_on: {}
+
+  identity-service:
+    <<: *backend-service
+    build:
+      context: .
+      dockerfile: infra/docker/node-service.Dockerfile
+      args:
+        PACKAGE: '@cve/identity-service'
+    environment:
+      <<: *backend-env
+      PORT: 4001
+      DATABASE_URL: postgresql://identity_service:${IDENTITY_SERVICE_DB_PASSWORD}@postgres:5432/identity_service
+
+  cve-service:
+    <<: *backend-service
+    build:
+      context: .
+      dockerfile: infra/docker/node-service.Dockerfile
+      args:
+        PACKAGE: '@cve/cve-service'
+    environment:
+      <<: *backend-env
+      PORT: 4002
+      DATABASE_URL: postgresql://cve_service:${CVE_SERVICE_DB_PASSWORD}@postgres:5432/cve_service
+
+  intelligence-service:
+    <<: *backend-service
+    build:
+      context: .
+      dockerfile: infra/docker/node-service.Dockerfile
+      args:
+        PACKAGE: '@cve/intelligence-service'
+    environment:
+      <<: *backend-env
+      PORT: 4003
+      DATABASE_URL: postgresql://intelligence_service:${INTELLIGENCE_SERVICE_DB_PASSWORD}@postgres:5432/intelligence_service
+
+  asset-service:
+    <<: *backend-service
+    build:
+      context: .
+      dockerfile: infra/docker/node-service.Dockerfile
+      args:
+        PACKAGE: '@cve/asset-service'
+    environment:
+      <<: *backend-env
+      PORT: 4004
+      DATABASE_URL: postgresql://asset_service:${ASSET_SERVICE_DB_PASSWORD}@postgres:5432/asset_service
+
+  poc-service:
+    <<: *backend-service
+    build:
+      context: .
+      dockerfile: infra/docker/node-service.Dockerfile
+      args:
+        PACKAGE: '@cve/poc-service'
+    environment:
+      <<: *backend-env
+      PORT: 4005
+      DATABASE_URL: postgresql://poc_service:${POC_SERVICE_DB_PASSWORD}@postgres:5432/poc_service
+
+  download-service:
+    <<: *backend-service
+    build:
+      context: .
+      dockerfile: infra/docker/node-service.Dockerfile
+      args:
+        PACKAGE: '@cve/download-service'
+    environment:
+      <<: *backend-env
+      PORT: 4006
+      DATABASE_URL: postgresql://download_service:${DOWNLOAD_SERVICE_DB_PASSWORD}@postgres:5432/download_service
+
+  exploit-service:
+    <<: *backend-service
+    build:
+      context: .
+      dockerfile: infra/docker/node-service.Dockerfile
+      args:
+        PACKAGE: '@cve/exploit-service'
+    environment:
+      <<: *backend-env
+      PORT: 4007
+      DATABASE_URL: postgresql://exploit_service:${EXPLOIT_SERVICE_DB_PASSWORD}@postgres:5432/exploit_service
+
+  reporting-service:
+    <<: *backend-service
+    build:
+      context: .
+      dockerfile: infra/docker/node-service.Dockerfile
+      args:
+        PACKAGE: '@cve/reporting-service'
+    environment:
+      <<: *backend-env
+      PORT: 4008
+      DATABASE_URL: postgresql://reporting_service:${REPORTING_SERVICE_DB_PASSWORD}@postgres:5432/reporting_service
+
+  notification-service:
+    <<: *backend-service
+    build:
+      context: .
+      dockerfile: infra/docker/node-service.Dockerfile
+      args:
+        PACKAGE: '@cve/notification-service'
+    environment:
+      <<: *backend-env
+      PORT: 4009
+      DATABASE_URL: postgresql://notification_service:${NOTIFICATION_SERVICE_DB_PASSWORD}@postgres:5432/notification_service
+
+  web:
+    profiles: [apps]
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: infra/docker/web.Dockerfile
+    environment:
+      NODE_ENV: production
+      API_GATEWAY_INTERNAL_URL: http://api-gateway:4000
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/apps/web/.next/cache
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 512M
+
+  nginx:
+    profiles: [apps]
+    image: nginx:1.28-alpine
+    restart: unless-stopped
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - '127.0.0.1:8080:8080'
+    depends_on:
+      web:
+        condition: service_healthy
+      api-gateway:
+        condition: service_healthy
+    <<: *limits-small
+
+  # ---------------------------------------------------------------- observability
+  prometheus:
+    profiles: [observability]
+    image: prom/prometheus:v3.5.0
+    restart: unless-stopped
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - '127.0.0.1:9090:9090'
+    <<: *limits-small
+
+  grafana:
+    profiles: [observability]
+    image: grafana/grafana:12.1.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - '127.0.0.1:3001:3000'
+    depends_on:
+      - prometheus
+    <<: *limits-small
+
+volumes:
+  postgres-data:
+  redis-data:
+  rabbitmq-data:
+  opensearch-data:
+  minio-data:
+  prometheus-data:
+  grafana-data:
