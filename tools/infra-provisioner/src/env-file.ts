@@ -93,6 +93,8 @@ export function renderDevEnvFiles(values: Map<string, string>): Record<string, s
         'OPENSEARCH_USERNAME=cve-service',
         `OPENSEARCH_PASSWORD=${required(values, 'CVE_SERVICE_OPENSEARCH_PASSWORD')}`,
         'OPENSEARCH_CA_FILE=../../.certs/platform-ca.pem',
+        `KEYCLOAK_URL=http://localhost:${DEV_HOST_PORTS.keycloak}/auth`,
+        `KEYCLOAK_PUBLIC_URL=http://localhost:${DEV_HOST_PORTS.keycloak}/auth`,
       );
     }
     if (service === 'identity-service') {

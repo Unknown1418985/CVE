@@ -50,6 +50,7 @@ const JOBS = new Set([
   'minio-init',
   'infra-provisioner',
   'identity-service-migrate',
+  'cve-service-migrate',
 ]);
 const DATA_STORES = ['postgres', 'redis', 'rabbitmq', 'opensearch', 'minio'];
 const EGRESS_ALLOWED = new Set([

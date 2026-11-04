@@ -291,3 +291,55 @@ describe('rate limiting', () => {
     await app.http.post('/api/v1/auth/logout').set(bearer(token)).expect(429);
   });
 });
+
+describe('CVE Service routes', () => {
+  it('requires cve:read to read and cve:manage to write', async () => {
+    const app = await start(backend(ok));
+    const viewer = await issuer.tokenFor(randomUUID(), ['viewer']);
+    const analyst = await issuer.tokenFor(randomUUID(), ['security-analyst']);
+    const admin = await issuer.tokenFor(randomUUID(), ['administrator']);
+
+    await app.http.get('/api/v1/cves').expect(401);
+    await app.http.get('/api/v1/cves?severity=critical').set(bearer(viewer)).expect(200);
+    await app.http.get('/api/v1/cves/CVE-2026-90001/cvss-history').set(bearer(viewer)).expect(200);
+    await app.http.post('/api/v1/cves').set(bearer(viewer)).send({}).expect(403);
+    await app.http.put('/api/v1/cves/CVE-2026-90001').set(bearer(analyst)).send({}).expect(403);
+    await app.http.patch('/api/v1/cves/CVE-2026-90001').set(bearer(analyst)).send({}).expect(403);
+    await app.http.delete('/api/v1/cves/CVE-2026-90001').set(bearer(viewer)).expect(403);
+    await app.http
+      .post('/api/v1/cves/CVE-2026-90001/epss')
+      .set(bearer(viewer))
+      .send({})
+      .expect(403);
+    await app.http.delete('/api/v1/cves/CVE-2026-90001').set(bearer(admin)).expect(200);
+
+    expect(forwarded.map((request) => `${request.method} ${request.url}`)).toEqual([
+      'GET http://cve-service.internal:4000/api/v1/cves?severity=critical',
+      'GET http://cve-service.internal:4000/api/v1/cves/CVE-2026-90001/cvss-history',
+      'DELETE http://cve-service.internal:4000/api/v1/cves/CVE-2026-90001',
+    ]);
+  });
+
+  it('forwards If-Match and Idempotency-Key and relays ETag', async () => {
+    const app = await start(
+      backend(() =>
+        Response.json(
+          { data: { cveId: 'CVE-2026-90001' } },
+          { status: 201, headers: { etag: '"1"', 'idempotent-replayed': 'true' } },
+        ),
+      ),
+    );
+    const admin = await issuer.tokenFor(randomUUID(), ['administrator']);
+    const res = await app.http
+      .post('/api/v1/cves')
+      .set(bearer(admin))
+      .set('idempotency-key', 'synthetic-key-1')
+      .set('if-match', '"1"')
+      .send({ cveId: 'CVE-2026-90001' })
+      .expect(201);
+    expect(res.headers['etag']).toBe('"1"');
+    expect(res.headers['idempotent-replayed']).toBe('true');
+    expect(forwarded[0]?.headers.get('idempotency-key')).toBe('synthetic-key-1');
+    expect(forwarded[0]?.headers.get('if-match')).toBe('"1"');
+  });
+});

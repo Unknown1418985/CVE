@@ -76,7 +76,9 @@ describe('renderDevEnvFiles', () => {
     expect(identity).toContain(
       `KEYCLOAK_ADMIN_CLIENT_SECRET=${values.get('KEYCLOAK_IDENTITY_SERVICE_CLIENT_SECRET') ?? ''}`,
     );
-    expect(cve).not.toContain('KEYCLOAK_');
+    // The CVE Service validates tokens itself, but holds no Keycloak client secret.
+    expect(cve).toContain('KEYCLOAK_URL=http://localhost:8180/auth');
+    expect(cve).not.toContain('CLIENT_SECRET');
   });
 
   it('refuses placeholders', () => {

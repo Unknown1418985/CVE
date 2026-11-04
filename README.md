@@ -4,11 +4,12 @@ A self-hosted platform for vulnerability intelligence, exploit tracking, control
 Proof-of-Concept collection and reporting. Everything is written in TypeScript and organised as a
 pnpm + Turborepo monorepo of independently deployable services.
 
-> **Status: Phase 1 (authentication, authorization, audit logging).** Keycloak login, JWT
-> validation, RBAC guards, the Identity Service (profiles, sessions, secure logout, user and role
-> administration, audit log) and gateway authentication with per-user rate limiting are
-> implemented. Web login and all CVE features are not built yet. See [Roadmap](#roadmap),
-> [docs/identity.md](docs/identity.md) and [`CLAUDE.md`](CLAUDE.md).
+> **Status: Phase 2 (CVE Service and database).** Keycloak authentication, RBAC, the Identity
+> Service with audit logging, and the CVE Service (CVE records, CVSS v3.1/v4.0, CWE, references,
+> affected products, KEV, EPSS, search and domain events) are implemented as APIs. The web UI and
+> the external data source integrations are not built yet. See [Roadmap](#roadmap),
+> [docs/cve-service.md](docs/cve-service.md), [docs/identity.md](docs/identity.md) and
+> [`CLAUDE.md`](CLAUDE.md).
 
 ## Repository layout
 
@@ -128,6 +129,7 @@ Run a single workspace with `pnpm --filter @cve/<name> <script>`.
 - [Infrastructure](docs/infrastructure.md)
 - [Messaging and background jobs](docs/messaging.md)
 - [Identity, authentication and authorization](docs/identity.md)
+- [CVE Service](docs/cve-service.md)
 - [Development specification](CLAUDE.md)
 
 ## Roadmap
@@ -136,7 +138,7 @@ Run a single workspace with `pnpm --filter @cve/<name> <script>`.
 | ----- | ---------------------------------------------------- | ---------- |
 | 0     | Monorepo and infrastructure foundation               | Done       |
 | 1     | Authentication, authorization, audit logging         | Done (API) |
-| 2     | CVE Service and database                             | Planned    |
+| 2     | CVE Service and database                             | Done (API) |
 | 3     | NVD, MITRE, CISA and EPSS integrations               | Planned    |
 | 4     | Asset and product intelligence                       | Planned    |
 | 5     | PoC discovery and metadata management                | Planned    |

@@ -502,8 +502,37 @@ services:
       identity-service-migrate:
         condition: service_completed_successfully
 
+  # Applies the CVE Service's Prisma migrations, then exits.
+  cve-service-migrate:
+    profiles: [apps]
+    image: cve-platform/cve-service:local
+    build:
+      context: .
+      dockerfile: infra/docker/node-service.Dockerfile
+      args:
+        PACKAGE: '@cve/cve-service'
+    restart: 'no'
+    read_only: true
+    tmpfs:
+      - /tmp
+    <<: [*hardening, *logging]
+    command: ['node', 'node_modules/prisma/build/index.js', 'migrate', 'deploy']
+    environment:
+      DATABASE_URL: postgresql://cve_service:${CVE_SERVICE_DB_PASSWORD}@postgres:5432/cve_service
+    networks: [data]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+          pids: 128
+
   cve-service:
     <<: *backend-service
+    image: cve-platform/cve-service:local
     build:
       context: .
       dockerfile: infra/docker/node-service.Dockerfile
@@ -519,12 +548,19 @@ services:
       OPENSEARCH_USERNAME: cve-service
       OPENSEARCH_PASSWORD: ${CVE_SERVICE_OPENSEARCH_PASSWORD}
       OPENSEARCH_CA_FILE: /run/platform-ca/platform-ca.pem
+      # Tokens are validated against the realm JWKS (internal URL); the issuer is the public URL.
+      KEYCLOAK_URL: http://keycloak:8180/auth
+      KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8080/auth}
     volumes:
       - platform-ca:/run/platform-ca:ro
     depends_on:
       <<: *backend-depends
       opensearch:
         condition: service_healthy
+      keycloak:
+        condition: service_healthy
+      cve-service-migrate:
+        condition: service_completed_successfully
 
   intelligence-service:
     <<: *backend-service

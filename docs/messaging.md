@@ -68,8 +68,7 @@ await publisher.publish(
 For events that must not be lost when the database commit succeeds but publishing fails, write
 them to the service's outbox table in the same transaction and let `OutboxRelay` publish them.
 `OutboxRelay` takes an `OutboxStore` implemented by the service on its own Prisma schema
-(`claimDue` should use `SELECT … FOR UPDATE SKIP LOCKED`); the first implementation arrives with
-the first event-producing service (Phase 2).
+(`claimDue` should use `SELECT … FOR UPDATE SKIP LOCKED`); the Identity and CVE Services implement it.
 
 ### Consuming
 
@@ -152,5 +151,8 @@ await worker.start();
   `identity.user.status-changed` and `identity.session.revoked` (payload schemas in
   `@cve/contracts`), and a BullMQ scheduler ingests Keycloak events into the audit log every minute.
   Its readiness check uses the AMQP connection and Redis `PING`.
+- **CVE Service** (Phase 2): `PrismaOutboxStore` + `OutboxRelay` publish `cve.record.created`,
+  `cve.record.updated` and `cve.record.deleted` (payload schemas in `@cve/contracts`, see
+  [cve-service.md](cve-service.md)). It uses no BullMQ jobs yet.
 - The other services do not open RabbitMQ or Redis connections yet; their first producers,
-  consumers and jobs arrive with their features, starting in Phase 2.
+  consumers and jobs arrive with their features.
