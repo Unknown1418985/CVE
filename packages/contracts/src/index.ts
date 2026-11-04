@@ -8,3 +8,4 @@ export * from './roles.js';
 export * from './services.js';
 export * from './storage.js';
 export * from './cve/index.js';
+export * from './intelligence/index.js';

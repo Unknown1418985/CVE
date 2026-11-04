@@ -1,0 +1,174 @@
+// Intelligence Service schema. Owned exclusively by intelligence-service (database
+// `intelligence_service`). Other services receive its data through domain events only.
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum SyncRunStatus {
+  running
+  succeeded
+  failed
+  abandoned
+
+  @@map("sync_run_status")
+}
+
+enum SyncTrigger {
+  scheduled
+  manual
+  recovery
+
+  @@map("sync_trigger")
+}
+
+/// Incremental position and run lease of one source (one row per source).
+model SourceSyncState {
+  source              String    @id @db.VarChar(32)
+  /// Adapter-specific cursor committed by the last successful run.
+  cursor              Json?
+  lastRunAt           DateTime? @map("last_run_at") @db.Timestamptz(3)
+  lastRunStatus       SyncRunStatus? @map("last_run_status")
+  lastSuccessAt       DateTime? @map("last_success_at") @db.Timestamptz(3)
+  consecutiveFailures Int       @default(0) @map("consecutive_failures")
+  /// Lease that keeps runs of the same source from overlapping across replicas.
+  leaseOwner          String?   @map("lease_owner") @db.VarChar(200)
+  leaseExpiresAt      DateTime? @map("lease_expires_at") @db.Timestamptz(3)
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("source_sync_states")
+}
+
+/// Synchronisation history: one row per run (each retry attempt is its own run).
+model SyncRun {
+  id               String        @id @default(uuid()) @db.Uuid
+  source           String        @db.VarChar(32)
+  trigger          SyncTrigger
+  status           SyncRunStatus @default(running)
+  jobId            String?       @map("job_id") @db.VarChar(160)
+  attempt          Int           @default(1)
+  requestedBy      String?       @map("requested_by") @db.VarChar(200)
+  resumedFromRunId String?       @unique @map("resumed_from_run_id") @db.Uuid
+  startedAt        DateTime      @map("started_at") @db.Timestamptz(3)
+  heartbeatAt      DateTime      @map("heartbeat_at") @db.Timestamptz(3)
+  finishedAt       DateTime?     @map("finished_at") @db.Timestamptz(3)
+  cursorBefore     Json?         @map("cursor_before")
+  cursorAfter      Json?         @map("cursor_after")
+  checkpoint       Json?
+  stats            Json
+  error            String?       @db.VarChar(2000)
+  issueCount       Int           @default(0) @map("issue_count")
+  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  resumedFrom SyncRun?       @relation("SyncRunResume", fields: [resumedFromRunId], references: [id], onDelete: SetNull)
+  resumedBy   SyncRun?       @relation("SyncRunResume")
+  issues      SyncRunIssue[]
+
+  @@index([source, startedAt(sort: Desc)])
+  @@index([status, heartbeatAt])
+  @@index([startedAt(sort: Desc)])
+  @@map("sync_runs")
+}
+
+/// Items a run refused or only partly accepted (validation problems at the source).
+model SyncRunIssue {
+  id             String   @id @default(uuid()) @db.Uuid
+  runId          String   @map("run_id") @db.Uuid
+  sourceRecordId String?  @map("source_record_id") @db.VarChar(128)
+  message        String   @db.VarChar(2000)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  run SyncRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId, createdAt])
+  @@map("sync_run_issues")
+}
+
+/// Latest state of every item seen at a source, with provenance and the raw upstream payload.
+model SourceRecord {
+  id               String    @id @default(uuid()) @db.Uuid
+  source           String    @db.VarChar(32)
+  /// Identifier at the source (CVE ID, GHSA ID, …).
+  externalId       String    @map("external_id") @db.VarChar(128)
+  cveId            String?   @map("cve_id") @db.VarChar(32)
+  sourceUrl        String    @map("source_url") @db.VarChar(2048)
+  contentHash      String    @map("content_hash") @db.Char(64)
+  revision         Int       @default(1)
+  /// Normalised content (what the events carry).
+  content          Json
+  /// Original payload, kept only where the source's terms permit (`null` otherwise).
+  raw              Json?
+  sourceModifiedAt DateTime? @map("source_modified_at") @db.Timestamptz(3)
+  firstSeenAt      DateTime  @map("first_seen_at") @db.Timestamptz(3)
+  lastSeenAt       DateTime  @map("last_seen_at") @db.Timestamptz(3)
+  lastChangedAt    DateTime  @map("last_changed_at") @db.Timestamptz(3)
+  /// Set when a complete snapshot no longer contains the item, or the source withdrew it.
+  removedAt        DateTime? @map("removed_at") @db.Timestamptz(3)
+  lastRunId        String?   @map("last_run_id") @db.Uuid
+
+  revisions SourceRecordRevision[]
+
+  @@unique([source, externalId])
+  @@index([cveId])
+  @@index([source, lastChangedAt])
+  @@map("source_records")
+}
+
+/// Append-only history of every distinct content a source reported for an item.
+model SourceRecordRevision {
+  id               String    @id @default(uuid()) @db.Uuid
+  recordId         String    @map("record_id") @db.Uuid
+  revision         Int
+  contentHash      String    @map("content_hash") @db.Char(64)
+  content          Json
+  sourceModifiedAt DateTime? @map("source_modified_at") @db.Timestamptz(3)
+  /// True for the tombstone written when the item disappears from the source.
+  removed          Boolean   @default(false)
+  observedAt       DateTime  @map("observed_at") @db.Timestamptz(3)
+  runId            String    @map("run_id") @db.Uuid
+
+  record SourceRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
+
+  @@unique([recordId, revision])
+  @@map("source_record_revisions")
+}
+
+/// Daily EPSS scores from FIRST, immutable per (CVE, score date); purged after the retention.
+model EpssScore {
+  cveId       String   @map("cve_id") @db.VarChar(32)
+  scoreDate   DateTime @map("score_date") @db.Date
+  score       Decimal  @db.Decimal(10, 9)
+  percentile  Decimal  @db.Decimal(10, 9)
+  modelVersion String? @map("model_version") @db.VarChar(32)
+  observedAt  DateTime @map("observed_at") @db.Timestamptz(3)
+  runId       String   @map("run_id") @db.Uuid
+
+  @@id([cveId, scoreDate])
+  @@index([scoreDate])
+  @@map("epss_scores")
+}
+
+/// Transactional outbox for domain events (published by OutboxRelay).
+model OutboxEvent {
+  id            String    @id @default(uuid()) @db.Uuid
+  eventId       String    @unique @map("event_id") @db.Uuid
+  eventType     String    @map("event_type") @db.VarChar(128)
+  envelope      Json
+  attempts      Int       @default(0)
+  lastError     String?   @map("last_error") @db.VarChar(2000)
+  nextAttemptAt DateTime  @default(now()) @map("next_attempt_at") @db.Timestamptz(3)
+  lockedUntil   DateTime? @map("locked_until") @db.Timestamptz(3)
+  publishedAt   DateTime? @map("published_at") @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([publishedAt, nextAttemptAt])
+  @@map("outbox_events")
+}

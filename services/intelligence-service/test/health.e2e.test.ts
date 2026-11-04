@@ -3,43 +3,39 @@ import 'reflect-metadata';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { healthReportSchema } from '@cve/contracts';
-import { createLogger } from '@cve/logger';
-import { configureServiceApp } from '@cve/shared';
-import { buildServiceTestEnv, createHttpTestApp, type HttpTestApp } from '@cve/testing';
+import { createTcpHealthIndicator } from '@cve/shared';
 
-import { AppModule } from '../src/app.module.js';
-import { loadServiceEnv } from '../src/config/env.js';
-import { SERVICE_NAME } from '../src/service.js';
+import { startApp, type AppContext } from './app-support.js';
+import { intelligenceTestEnv } from './support.js';
 
 describe('intelligence-service health endpoints', () => {
-  let t: HttpTestApp;
+  let ctx: AppContext;
 
   beforeAll(async () => {
-    const env = loadServiceEnv(buildServiceTestEnv(SERVICE_NAME));
-    t = await createHttpTestApp(AppModule.register(env), (app) => {
-      configureServiceApp(app, {
-        service: SERVICE_NAME,
-        version: '0.0.0-test',
-        logger: createLogger({ service: SERVICE_NAME, level: 'silent' }),
-        corsAllowedOrigins: [],
-        swaggerEnabled: false,
-      });
+    const env = intelligenceTestEnv(null);
+    ctx = await startApp(null, {
+      env,
+      healthIndicators: [
+        createTcpHealthIndicator('postgres', env.DATABASE_URL),
+        createTcpHealthIndicator('rabbitmq', env.RABBITMQ_URL),
+        createTcpHealthIndicator('redis', env.REDIS_URL),
+      ],
     });
   });
 
   afterAll(async () => {
-    await t.close();
+    await ctx.t.close();
   });
 
-  it('GET /api/v1/health/live returns ok', async () => {
-    const res = await t.http.get('/api/v1/health/live').expect(200);
+  it('GET /api/v1/health/live returns ok without a token', async () => {
+    const res = await ctx.t.http.get('/api/v1/health/live').expect(200);
     const report = healthReportSchema.parse((res.body as { data: unknown }).data);
     expect(report.service).toBe('intelligence-service');
     expect(report.status).toBe('ok');
   });
 
   it('GET /api/v1/health/ready returns 503 when dependencies are unreachable', async () => {
-    const res = await t.http.get('/api/v1/health/ready').expect(503);
+    const res = await ctx.t.http.get('/api/v1/health/ready').expect(503);
     const report = healthReportSchema.parse((res.body as { data: unknown }).data);
     expect(report.checks.map((check) => check.name).sort()).toEqual([
       'postgres',
