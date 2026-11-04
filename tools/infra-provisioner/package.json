@@ -1,0 +1,29 @@
+{
+  "name": "@cve/infra-provisioner",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Idempotent provisioning of RabbitMQ and OpenSearch users, permissions and topology, plus .env generation.",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/main.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "clean": "rm -rf dist .turbo"
+  },
+  "dependencies": {
+    "@cve/config": "workspace:*",
+    "@cve/contracts": "workspace:*",
+    "@cve/logger": "workspace:*",
+    "@cve/messaging": "workspace:*",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "~6.0.3",
+    "vitest": "^5.1.0"
+  }
+}

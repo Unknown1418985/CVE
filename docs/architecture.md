@@ -61,11 +61,14 @@ This document describes the structure established in Phase 0. It is updated as e
 - **Synchronous:** HTTP/JSON between the gateway and services, using the envelopes from
   `@cve/contracts` (`{ data }`, `{ data, meta }` for pagination, `{ error, correlationId, timestamp }`).
 - **Asynchronous:** RabbitMQ domain events using `domainEventEnvelopeSchema`
-  (`eventType` = `<domain>.<entity>.<action>`, versioned, with producer and correlation ID).
-  Important events are published through a per-service outbox table (introduced with the first
-  event-producing feature).
+  (`eventType` = `<domain>.<entity>.<action>`, versioned, with producer and correlation ID),
+  implemented by `@cve/messaging`: confirmed publishing to the `cve.events` topic exchange,
+  per-consumer quorum queues with delayed retries and dead-letter queues, idempotent consumers and
+  an outbox relay. Important events go through a per-service outbox table (the first store
+  implementation arrives with the first event-producing feature). See [messaging.md](messaging.md).
 - **Background jobs:** BullMQ on Redis for retryable and scheduled work (synchronisation,
-  downloads, reports).
+  downloads, reports), implemented by `@cve/jobs` with service-scoped key prefixes that match each
+  service's Redis ACL.
 
 ## Cross-cutting conventions (implemented in Phase 0)
 
@@ -97,6 +100,8 @@ clients for those dependencies.
 | `@cve/database`  | —                                                  | services                  |
 | `@cve/shared`    | contracts, config, logger, security, NestJS (peer) | services, gateway         |
 | `@cve/testing`   | NestJS testing, supertest, unplugin-swc            | tests only                |
+| `@cve/messaging` | contracts, logger, amqplib                         | services                  |
+| `@cve/jobs`      | contracts, logger, bullmq, ioredis                 | services                  |
 
 Packages are ESM, compiled with `tsc` to `dist/`, and built before dependants by Turborepo
 (`dependsOn: ["^build"]`). Shared packages contain no business logic.

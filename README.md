@@ -31,9 +31,14 @@ packages/
   security/               Security headers (helmet), strict CORS, correlation IDs, rate-limit defaults
   database/               Database ownership rules and connection helpers
   shared/                 NestJS runtime: bootstrap, HTTP conventions, health module, error filter
-  testing/                Vitest presets (SWC for decorators) and NestJS HTTP test harness
-infra/                    Dockerfiles, PostgreSQL init, Nginx, Prometheus, Grafana
-docs/                     Architecture and infrastructure documentation
+  testing/                Vitest presets (SWC for decorators), NestJS HTTP harness, integration helpers
+  messaging/              RabbitMQ domain events: publisher, consumer with retries/DLQ, outbox relay
+  jobs/                   BullMQ queues, workers and schedulers with validated payloads
+tools/
+  infra-provisioner/      RabbitMQ/OpenSearch provisioning, `env:generate`, `infra:wait`
+  infra-tests/            Compose policy tests and live infrastructure tests
+infra/                    Dockerfiles and configuration for every infrastructure component
+docs/                     Architecture, infrastructure and messaging documentation
 ```
 
 ## Requirements
@@ -47,9 +52,9 @@ docs/                     Architecture and infrastructure documentation
 ```bash
 corepack enable
 pnpm install
-cp .env.example .env            # then replace every change-me value
-
-pnpm build                      # build all packages and apps
+pnpm build
+pnpm env:generate               # .env with random per-service secrets (never committed)
+                      # build all packages and apps
 pnpm typecheck
 pnpm lint
 pnpm test
@@ -58,12 +63,18 @@ pnpm test
 ### Run the infrastructure
 
 ```bash
-docker compose up -d            # PostgreSQL, Redis, RabbitMQ, OpenSearch, MinIO, Keycloak
+docker compose up -d --build    # PostgreSQL, Redis, RabbitMQ, OpenSearch, MinIO, Keycloak + provisioning
+pnpm infra:wait
 ```
+
+Nothing but Nginx and Grafana is published to the host. For `pnpm dev`, add the development
+override, which publishes the infrastructure ports on 127.0.0.1:
+`docker compose -f compose.yaml -f compose.dev.yaml up -d --build`. See
+[docs/infrastructure.md](docs/infrastructure.md).
 
 ### Run the applications
 
-Either locally in watch mode (each service also needs its own `DATABASE_URL`, see `.env.example`):
+Either locally in watch mode (`pnpm env:generate` wrote each service's own `.env`):
 
 ```bash
 pnpm dev
@@ -73,7 +84,7 @@ or fully containerised behind Nginx at <http://localhost:8080>:
 
 ```bash
 docker compose --profile apps up -d --build
-docker compose --profile observability up -d   # Prometheus (9090) and Grafana (3001)
+docker compose --profile observability up -d   # Prometheus, exporters, Grafana (127.0.0.1:3001)
 ```
 
 ## Health endpoints
@@ -92,15 +103,18 @@ backend service. The web app exposes `/api/health`. Default ports: gateway `4000
 
 ## Workspace scripts
 
-| Command               | Description                                          |
-| --------------------- | ---------------------------------------------------- |
-| `pnpm build`          | Build everything with Turborepo                      |
-| `pnpm dev`            | Run all apps and services in watch mode              |
-| `pnpm typecheck`      | Strict TypeScript checks for every workspace         |
-| `pnpm lint`           | ESLint (typescript-eslint strict, type-aware)        |
-| `pnpm test`           | Vitest in every workspace                            |
-| `pnpm format`         | Prettier                                             |
-| `pnpm compose:config` | Validate the Docker Compose file with `.env.example` |
+| Command                 | Description                                                    |
+| ----------------------- | -------------------------------------------------------------- |
+| `pnpm build`            | Build everything with Turborepo                                |
+| `pnpm dev`              | Run all apps and services in watch mode                        |
+| `pnpm typecheck`        | Strict TypeScript checks for every workspace                   |
+| `pnpm lint`             | ESLint (typescript-eslint strict, type-aware)                  |
+| `pnpm test`             | Vitest in every workspace                                      |
+| `pnpm format`           | Prettier                                                       |
+| `pnpm compose:config`   | Validate the Docker Compose file with `.env.example`           |
+| `pnpm env:generate`     | Create `.env` and per-app dev `.env` files with random secrets |
+| `pnpm infra:wait`       | Wait until the Compose stack is healthy and provisioned        |
+| `pnpm test:integration` | Live tests against the running stack (see docs)                |
 
 Run a single workspace with `pnpm --filter @cve/<name> <script>`.
 
@@ -108,6 +122,7 @@ Run a single workspace with `pnpm --filter @cve/<name> <script>`.
 
 - [Architecture](docs/architecture.md)
 - [Infrastructure](docs/infrastructure.md)
+- [Messaging and background jobs](docs/messaging.md)
 - [Development specification](CLAUDE.md)
 
 ## Roadmap

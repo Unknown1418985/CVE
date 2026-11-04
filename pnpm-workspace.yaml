@@ -2,6 +2,7 @@ packages:
   - 'apps/*'
   - 'services/*'
   - 'packages/*'
+  - 'tools/*'
 
 # Only allow dependency build scripts that are explicitly trusted.
 onlyBuiltDependencies:

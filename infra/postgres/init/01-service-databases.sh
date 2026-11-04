@@ -34,3 +34,18 @@ create_owned_database exploit_service "${EXPLOIT_SERVICE_DB_PASSWORD:-}"
 create_owned_database reporting_service "${REPORTING_SERVICE_DB_PASSWORD:-}"
 create_owned_database notification_service "${NOTIFICATION_SERVICE_DB_PASSWORD:-}"
 create_owned_database keycloak "${KEYCLOAK_DB_PASSWORD:-}"
+
+# Read-only monitoring role for postgres-exporter (built-in pg_monitor role, no data access).
+if [ -z "${POSTGRES_EXPORTER_PASSWORD:-}" ]; then
+  echo "Missing password for database role postgres_exporter" >&2
+  exit 1
+fi
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
+  -v password="$POSTGRES_EXPORTER_PASSWORD" <<'SQL'
+SELECT format('CREATE ROLE postgres_exporter LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION CONNECTION LIMIT 5', :'password') \gexec
+GRANT pg_monitor TO postgres_exporter;
+-- Service roles may not open sessions on the maintenance databases.
+REVOKE CONNECT ON DATABASE postgres FROM PUBLIC;
+REVOKE CONNECT ON DATABASE template1 FROM PUBLIC;
+GRANT CONNECT ON DATABASE postgres TO postgres_exporter;
+SQL

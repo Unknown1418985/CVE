@@ -4,3 +4,4 @@ export * from './health.js';
 export * from './http.js';
 export * from './roles.js';
 export * from './services.js';
+export * from './storage.js';
