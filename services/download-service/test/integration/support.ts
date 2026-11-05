@@ -39,16 +39,20 @@ export function redisUrl(): string {
 /** MinIO; defaults to the dev stack (buckets provisioned by `minio-init`). */
 export function s3Settings() {
   return {
-    S3_ENDPOINT: override('DOWNLOAD_SERVICE_TEST_S3_ENDPOINT') ?? `http://${integrationHost()}:9000`,
+    S3_ENDPOINT:
+      override('DOWNLOAD_SERVICE_TEST_S3_ENDPOINT') ?? `http://${integrationHost()}:9000`,
     S3_ACCESS_KEY_ID: override('DOWNLOAD_SERVICE_TEST_S3_ACCESS_KEY_ID') ?? 'download-service',
     S3_SECRET_ACCESS_KEY:
-      override('DOWNLOAD_SERVICE_TEST_S3_SECRET_ACCESS_KEY') ?? requireEnv('DOWNLOAD_SERVICE_MINIO_SECRET_KEY'),
+      override('DOWNLOAD_SERVICE_TEST_S3_SECRET_ACCESS_KEY') ??
+      requireEnv('DOWNLOAD_SERVICE_MINIO_SECRET_KEY'),
   };
 }
 
 /** clamd (`host:port`) and the YARA command-line scanner; both are required by this suite. */
 export function scannerSettings() {
-  const [host = integrationHost(), port = '3310'] = (override('DOWNLOAD_SERVICE_TEST_CLAMAV') ?? '').split(':').filter(Boolean);
+  const [host = integrationHost(), port = '3310'] = (override('DOWNLOAD_SERVICE_TEST_CLAMAV') ?? '')
+    .split(':')
+    .filter(Boolean);
   return {
     CLAMAV_HOST: host,
     CLAMAV_PORT: port,
@@ -113,7 +117,10 @@ export async function ensureBuckets(env: Env): Promise<void> {
     credentials: { accessKeyId: env.S3_ACCESS_KEY_ID, secretAccessKey: env.S3_SECRET_ACCESS_KEY },
   });
   try {
-    for (const bucket of [OBJECT_STORAGE_BUCKETS.pocQuarantine, OBJECT_STORAGE_BUCKETS.pocArtifacts]) {
+    for (const bucket of [
+      OBJECT_STORAGE_BUCKETS.pocQuarantine,
+      OBJECT_STORAGE_BUCKETS.pocArtifacts,
+    ]) {
       try {
         await client.send(new HeadBucketCommand({ Bucket: bucket }));
       } catch {

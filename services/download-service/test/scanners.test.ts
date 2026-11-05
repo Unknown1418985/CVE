@@ -25,7 +25,8 @@ function fakeClamd(): Promise<{ server: Server; port: number; received: Buffer[]
         const command = buffer.subarray(0, end).toString();
         buffer = buffer.subarray(end + 1);
         if (command === 'zPING') socket.end('PONG\0');
-        else if (command === 'zVERSION') socket.end('ClamAV 1.4.0/27000/Wed Nov  5 08:00:00 2026\0');
+        else if (command === 'zVERSION')
+          socket.end('ClamAV 1.4.0/27000/Wed Nov  5 08:00:00 2026\0');
         else if (command === 'zINSTREAM') streaming = true;
         else socket.end('UNKNOWN COMMAND\0');
       }
@@ -33,7 +34,11 @@ function fakeClamd(): Promise<{ server: Server; port: number; received: Buffer[]
         const length = buffer.readUInt32BE(0);
         if (length === 0) {
           received.push(content);
-          socket.end(content.includes(Buffer.from('EICAR')) ? 'stream: Eicar-Test-Signature FOUND\0' : 'stream: OK\0');
+          socket.end(
+            content.includes(Buffer.from('EICAR'))
+              ? 'stream: Eicar-Test-Signature FOUND\0'
+              : 'stream: OK\0',
+          );
           return;
         }
         if (buffer.length < 4 + length) return;
@@ -78,7 +83,12 @@ describe('ClamAV (clamd INSTREAM)', () => {
   });
 
   it('streams the file in length-prefixed chunks and reports findings and versions', async () => {
-    const scanner = new ClamdScanner({ host: '127.0.0.1', port: clamd.port, timeoutMs: 5_000, chunkBytes: 7 });
+    const scanner = new ClamdScanner({
+      host: '127.0.0.1',
+      port: clamd.port,
+      timeoutMs: 5_000,
+      chunkBytes: 7,
+    });
     const file = join(dir, 'eicar.txt');
     writeFileSync(file, EICAR);
     const result = await scanner.scan(file, AbortSignal.timeout(5_000));
@@ -119,7 +129,11 @@ describe('YARA', () => {
   });
 
   it('reports an error (never clean) when the scanner cannot run', async () => {
-    const scanner = new YaraCliScanner({ binary: '/nonexistent/yara', rulesPath: '/nonexistent.yar', timeoutMs: 2_000 });
+    const scanner = new YaraCliScanner({
+      binary: '/nonexistent/yara',
+      rulesPath: '/nonexistent.yar',
+      timeoutMs: 2_000,
+    });
     const file = join(dir, 'y.txt');
     writeFileSync(file, 'x');
     const result = await scanner.scan(file, AbortSignal.timeout(5_000));

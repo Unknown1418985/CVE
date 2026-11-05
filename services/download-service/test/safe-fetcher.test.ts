@@ -31,7 +31,14 @@ const resolver = mapResolver({
   'metadata.github.test': ['169.254.169.254'],
 });
 
-function fetcher(overrides: { resolver?: Resolver; exceptions?: string[]; totalTimeoutMs?: number; idleTimeoutMs?: number } = {}) {
+function fetcher(
+  overrides: {
+    resolver?: Resolver;
+    exceptions?: string[];
+    totalTimeoutMs?: number;
+    idleTimeoutMs?: number;
+  } = {},
+) {
   return new SafeFetcher({
     addressPolicy: new AddressPolicy(overrides.exceptions ?? ['127.0.0.1/32']),
     userAgent: 'download-service-test',
@@ -46,7 +53,13 @@ function fetcher(overrides: { resolver?: Resolver; exceptions?: string[]; totalT
 
 function policy(overrides: Partial<FetchPolicy> = {}): FetchPolicy {
   return {
-    allowedHosts: ['codeload.github.test', 'mirror.github.test', 'rebind.test', 'private.github.test', 'metadata.github.test'],
+    allowedHosts: [
+      'codeload.github.test',
+      'mirror.github.test',
+      'rebind.test',
+      'private.github.test',
+      'metadata.github.test',
+    ],
     allowedPorts: [source.port],
     allowedContentTypes: ['application/x-gzip', 'application/octet-stream'],
     maxBytes: 64 * 1024,
@@ -73,7 +86,10 @@ beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), 'download-fetch-'));
   source
     .route('codeload.github.test', '/ok.tar.gz', (_req, res) => {
-      res.writeHead(200, { 'content-type': 'application/x-gzip', 'content-length': String(archive.length) });
+      res.writeHead(200, {
+        'content-type': 'application/x-gzip',
+        'content-length': String(archive.length),
+      });
       res.end(archive);
     })
     .route('codeload.github.test', '/chunked', (_req, res) => {
@@ -97,13 +113,18 @@ beforeAll(async () => {
       res.writeHead(307, { location: `https://127.0.0.1:${String(source.port)}/ok.tar.gz` }).end();
     })
     .route('codeload.github.test', '/redirect-http', (_req, res) => {
-      res.writeHead(302, { location: `http://mirror.github.test:${String(source.port)}/ok.tar.gz` }).end();
+      res
+        .writeHead(302, { location: `http://mirror.github.test:${String(source.port)}/ok.tar.gz` })
+        .end();
     })
     .route('codeload.github.test', '/redirect-loop', (_req, res) => {
       res.writeHead(302, { location: '/redirect-loop' }).end();
     })
     .route('codeload.github.test', '/huge-declared', (_req, res) => {
-      res.writeHead(200, { 'content-type': 'application/x-gzip', 'content-length': String(10 * 1024 * 1024) });
+      res.writeHead(200, {
+        'content-type': 'application/x-gzip',
+        'content-length': String(10 * 1024 * 1024),
+      });
       res.end();
     })
     .route('codeload.github.test', '/huge-streamed', (_req, res) => {
@@ -126,7 +147,9 @@ beforeAll(async () => {
       res.writeHead(200, { 'content-type': 'text/html' }).end('<html></html>');
     })
     .route('codeload.github.test', '/encoded', (_req, res) => {
-      res.writeHead(200, { 'content-type': 'application/x-gzip', 'content-encoding': 'gzip' }).end(archive);
+      res
+        .writeHead(200, { 'content-type': 'application/x-gzip', 'content-encoding': 'gzip' })
+        .end(archive);
     })
     .route('codeload.github.test', '/not-found', (_req, res) => {
       res.writeHead(404).end();
@@ -165,32 +188,56 @@ beforeEach(() => {
 describe('SafeFetcher', () => {
   it('streams a file to disk with its SHA-256, size, head and provenance', async () => {
     const target = destination();
-    const result = await fetcher().fetchToFile(url('codeload.github.test', '/ok.tar.gz'), policy(), target, AbortSignal.timeout(5_000));
+    const result = await fetcher().fetchToFile(
+      url('codeload.github.test', '/ok.tar.gz'),
+      policy(),
+      target,
+      AbortSignal.timeout(5_000),
+    );
     expect(result.sha256).toBe(createHash('sha256').update(archive).digest('hex'));
     expect(result.bytes).toBe(archive.length);
     expect(readFileSync(target).equals(archive)).toBe(true);
     expect(result.head.subarray(0, 2)).toEqual(Buffer.from([0x1f, 0x8b]));
     expect(result.hops).toEqual([
-      expect.objectContaining({ resolvedAddresses: ['127.0.0.1'], connectedAddress: '127.0.0.1', status: 200 }),
+      expect.objectContaining({
+        resolvedAddresses: ['127.0.0.1'],
+        connectedAddress: '127.0.0.1',
+        status: 200,
+      }),
     ]);
     expect(source.requests[0]?.headers['accept-encoding']).toBe('identity');
   });
 
   it('streams chunked responses without a declared length', async () => {
-    const result = await fetcher().fetchToFile(url('codeload.github.test', '/chunked'), policy(), destination(), AbortSignal.timeout(5_000));
+    const result = await fetcher().fetchToFile(
+      url('codeload.github.test', '/chunked'),
+      policy(),
+      destination(),
+      AbortSignal.timeout(5_000),
+    );
     expect(result.bytes).toBe(archive.length * 10);
     expect(result.declaredLength).toBeNull();
   });
 
   it('follows a redirect to another allowlisted host and records every hop', async () => {
-    const result = await fetcher().fetchToFile(url('codeload.github.test', '/redirect-mirror'), policy(), destination(), AbortSignal.timeout(5_000));
+    const result = await fetcher().fetchToFile(
+      url('codeload.github.test', '/redirect-mirror'),
+      policy(),
+      destination(),
+      AbortSignal.timeout(5_000),
+    );
     expect(result.finalUrl).toBe(url('mirror.github.test', '/ok.tar.gz'));
     expect(result.hops.map((hop) => hop.status)).toEqual([302, 200]);
   });
 
   it('refuses a redirect to a host outside the allowlist without contacting it', async () => {
     const error = await failure(
-      fetcher().fetchToFile(url('codeload.github.test', '/redirect-evil'), policy(), destination(), AbortSignal.timeout(5_000)),
+      fetcher().fetchToFile(
+        url('codeload.github.test', '/redirect-evil'),
+        policy(),
+        destination(),
+        AbortSignal.timeout(5_000),
+      ),
     );
     expect(error.code).toBe('host-not-allowed');
     expect(error.retryable).toBe(false);
@@ -199,7 +246,12 @@ describe('SafeFetcher', () => {
 
   it('revalidates DNS after a redirect and blocks private destinations', async () => {
     const error = await failure(
-      fetcher().fetchToFile(url('codeload.github.test', '/redirect-private'), policy(), destination(), AbortSignal.timeout(5_000)),
+      fetcher().fetchToFile(
+        url('codeload.github.test', '/redirect-private'),
+        policy(),
+        destination(),
+        AbortSignal.timeout(5_000),
+      ),
     );
     expect(error.code).toBe('address-blocked');
     expect(error.hops).toHaveLength(2);
@@ -208,34 +260,80 @@ describe('SafeFetcher', () => {
 
   it('refuses redirects to IP literals and to plain http', async () => {
     expect(
-      (await failure(fetcher().fetchToFile(url('codeload.github.test', '/redirect-ip'), policy(), destination(), AbortSignal.timeout(5_000)))).code,
+      (
+        await failure(
+          fetcher().fetchToFile(
+            url('codeload.github.test', '/redirect-ip'),
+            policy(),
+            destination(),
+            AbortSignal.timeout(5_000),
+          ),
+        )
+      ).code,
     ).toBe('host-not-allowed');
     expect(
-      (await failure(fetcher().fetchToFile(url('codeload.github.test', '/redirect-http'), policy(), destination(), AbortSignal.timeout(5_000)))).code,
+      (
+        await failure(
+          fetcher().fetchToFile(
+            url('codeload.github.test', '/redirect-http'),
+            policy(),
+            destination(),
+            AbortSignal.timeout(5_000),
+          ),
+        )
+      ).code,
     ).toBe('invalid-redirect');
   });
 
   it('stops redirect loops', async () => {
     const error = await failure(
-      fetcher().fetchToFile(url('codeload.github.test', '/redirect-loop'), policy(), destination(), AbortSignal.timeout(5_000)),
+      fetcher().fetchToFile(
+        url('codeload.github.test', '/redirect-loop'),
+        policy(),
+        destination(),
+        AbortSignal.timeout(5_000),
+      ),
     );
     expect(error.code).toBe('too-many-redirects');
   });
 
   it('blocks loopback, link-local (metadata) and private answers when no exception applies', async () => {
     const strict = fetcher({ exceptions: [] });
-    expect((await failure(strict.fetchToFile(url('codeload.github.test', '/ok.tar.gz'), policy(), destination(), AbortSignal.timeout(5_000)))).code).toBe(
-      'address-blocked',
-    );
-    expect((await failure(strict.fetchToFile(url('metadata.github.test', '/latest'), policy(), destination(), AbortSignal.timeout(5_000)))).code).toBe(
-      'address-blocked',
-    );
+    expect(
+      (
+        await failure(
+          strict.fetchToFile(
+            url('codeload.github.test', '/ok.tar.gz'),
+            policy(),
+            destination(),
+            AbortSignal.timeout(5_000),
+          ),
+        )
+      ).code,
+    ).toBe('address-blocked');
+    expect(
+      (
+        await failure(
+          strict.fetchToFile(
+            url('metadata.github.test', '/latest'),
+            policy(),
+            destination(),
+            AbortSignal.timeout(5_000),
+          ),
+        )
+      ).code,
+    ).toBe('address-blocked');
     expect(source.requests).toHaveLength(0);
   });
 
   it('refuses a name whose answers mix public and private addresses (rebinding)', async () => {
     const error = await failure(
-      fetcher().fetchToFile(url('rebind.test', '/ok.tar.gz'), policy(), destination(), AbortSignal.timeout(5_000)),
+      fetcher().fetchToFile(
+        url('rebind.test', '/ok.tar.gz'),
+        policy(),
+        destination(),
+        AbortSignal.timeout(5_000),
+      ),
     );
     expect(error.code).toBe('address-blocked');
   });
@@ -250,51 +348,124 @@ describe('SafeFetcher', () => {
       [`https://[::1]:${String(source.port)}/`, 'host-not-allowed'],
     ];
     for (const [target, code] of cases) {
-      expect((await failure(f.fetchToFile(target, policy(), destination(), AbortSignal.timeout(5_000)))).code).toBe(code);
+      expect(
+        (await failure(f.fetchToFile(target, policy(), destination(), AbortSignal.timeout(5_000))))
+          .code,
+      ).toBe(code);
     }
     expect(source.requests).toHaveLength(0);
   });
 
   it('enforces the declared and the streamed size limit', async () => {
     const declared = await failure(
-      fetcher().fetchToFile(url('codeload.github.test', '/huge-declared'), policy(), destination(), AbortSignal.timeout(5_000)),
+      fetcher().fetchToFile(
+        url('codeload.github.test', '/huge-declared'),
+        policy(),
+        destination(),
+        AbortSignal.timeout(5_000),
+      ),
     );
     expect(declared.code).toBe('size-limit-exceeded');
     const streamed = await failure(
-      fetcher().fetchToFile(url('codeload.github.test', '/huge-streamed'), policy(), destination(), AbortSignal.timeout(5_000)),
+      fetcher().fetchToFile(
+        url('codeload.github.test', '/huge-streamed'),
+        policy(),
+        destination(),
+        AbortSignal.timeout(5_000),
+      ),
     );
     expect(streamed.code).toBe('size-limit-exceeded');
     expect(streamed.bytesReceived).toBeLessThanOrEqual(64 * 1024 + 16 * 1024);
   });
 
   it('refuses content types and encodings the source does not allow', async () => {
-    expect((await failure(fetcher().fetchToFile(url('codeload.github.test', '/html'), policy(), destination(), AbortSignal.timeout(5_000)))).code).toBe(
-      'content-type-not-allowed',
-    );
-    expect((await failure(fetcher().fetchToFile(url('codeload.github.test', '/encoded'), policy(), destination(), AbortSignal.timeout(5_000)))).code).toBe(
-      'unsupported-encoding',
-    );
+    expect(
+      (
+        await failure(
+          fetcher().fetchToFile(
+            url('codeload.github.test', '/html'),
+            policy(),
+            destination(),
+            AbortSignal.timeout(5_000),
+          ),
+        )
+      ).code,
+    ).toBe('content-type-not-allowed');
+    expect(
+      (
+        await failure(
+          fetcher().fetchToFile(
+            url('codeload.github.test', '/encoded'),
+            policy(),
+            destination(),
+            AbortSignal.timeout(5_000),
+          ),
+        )
+      ).code,
+    ).toBe('unsupported-encoding');
   });
 
   it('classifies HTTP failures as retryable or not', async () => {
-    const notFound = await failure(fetcher().fetchToFile(url('codeload.github.test', '/not-found'), policy(), destination(), AbortSignal.timeout(5_000)));
-    expect([notFound.code, notFound.retryable, notFound.httpStatus]).toEqual(['http-error', false, 404]);
-    const unavailable = await failure(fetcher().fetchToFile(url('codeload.github.test', '/unavailable'), policy(), destination(), AbortSignal.timeout(5_000)));
+    const notFound = await failure(
+      fetcher().fetchToFile(
+        url('codeload.github.test', '/not-found'),
+        policy(),
+        destination(),
+        AbortSignal.timeout(5_000),
+      ),
+    );
+    expect([notFound.code, notFound.retryable, notFound.httpStatus]).toEqual([
+      'http-error',
+      false,
+      404,
+    ]);
+    const unavailable = await failure(
+      fetcher().fetchToFile(
+        url('codeload.github.test', '/unavailable'),
+        policy(),
+        destination(),
+        AbortSignal.timeout(5_000),
+      ),
+    );
     expect([unavailable.code, unavailable.retryable]).toEqual(['http-error', true]);
-    const limited = await failure(fetcher().fetchToFile(url('codeload.github.test', '/rate-limited'), policy(), destination(), AbortSignal.timeout(5_000)));
+    const limited = await failure(
+      fetcher().fetchToFile(
+        url('codeload.github.test', '/rate-limited'),
+        policy(),
+        destination(),
+        AbortSignal.timeout(5_000),
+      ),
+    );
     expect([limited.code, limited.retryable]).toEqual(['rate-limited', true]);
-    const empty = await failure(fetcher().fetchToFile(url('codeload.github.test', '/empty'), policy(), destination(), AbortSignal.timeout(5_000)));
+    const empty = await failure(
+      fetcher().fetchToFile(
+        url('codeload.github.test', '/empty'),
+        policy(),
+        destination(),
+        AbortSignal.timeout(5_000),
+      ),
+    );
     expect(empty.code).toBe('empty-response');
   });
 
   it('times out a stalled transfer and detects truncation', async () => {
     const stalled = await failure(
-      fetcher({ idleTimeoutMs: 1_000, totalTimeoutMs: 3_000 }).fetchToFile(url('codeload.github.test', '/stall'), policy(), destination(), AbortSignal.timeout(10_000)),
+      fetcher({ idleTimeoutMs: 1_000, totalTimeoutMs: 3_000 }).fetchToFile(
+        url('codeload.github.test', '/stall'),
+        policy(),
+        destination(),
+        AbortSignal.timeout(10_000),
+      ),
     );
     expect(stalled.code).toBe('timeout');
     expect(stalled.retryable).toBe(true);
     const truncated = await failure(
-      fetcher().fetchToFile(url('codeload.github.test', '/truncated'), policy(), destination(), AbortSignal.timeout(5_000)),
+      fetcher().fetchToFile(
+        url('codeload.github.test', '/truncated'),
+        policy(),
+        destination(),
+        AbortSignal.timeout(5_000),
+      ),
     );
     expect(truncated.retryable).toBe(true);
   });
@@ -309,7 +480,14 @@ describe('SafeFetcher', () => {
       totalTimeoutMs: 5_000,
       maxRedirects: 3,
     });
-    const error = await failure(untrusted.fetchToFile(url('codeload.github.test', '/ok.tar.gz'), policy(), destination(), AbortSignal.timeout(5_000)));
+    const error = await failure(
+      untrusted.fetchToFile(
+        url('codeload.github.test', '/ok.tar.gz'),
+        policy(),
+        destination(),
+        AbortSignal.timeout(5_000),
+      ),
+    );
     expect(error.code).toBe('tls-failure');
   });
 });

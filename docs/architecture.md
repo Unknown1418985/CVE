@@ -128,6 +128,14 @@ The PoC Service (Phase 5, [poc-service.md](poc-service.md)) stores repository me
 listings only: it never fetches file contents, clones or archives, scores CVE associations instead of
 trusting repository text, and hides artifacts judged malicious from users without `quarantine:read`.
 
-The following are specified in `CLAUDE.md` and are deliberately not implemented yet: web login, download hardening and
-quarantine (Phase 6), TLS termination, metrics and backups (Phase 10). Downloaded PoC content will
-never be executed or automatically extracted.
+The Download Service (Phase 6, [download-service.md](download-service.md)) is the only component
+that fetches PoC content.
+
+- It downloads from allowlisted sources only, validates DNS answers and every redirect against
+  private and reserved ranges, and streams responses under size and time limits.
+- It stores every artifact in MinIO quarantine and scans it with ClamAV and YARA.
+- A user with `quarantine:manage` must explicitly release an artifact before it is served.
+- Downloaded content is never executed, extracted or previewed.
+
+The following are specified in `CLAUDE.md` and are deliberately not implemented yet: web login,
+TLS termination, metrics and backups (Phase 10).

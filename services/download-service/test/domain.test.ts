@@ -105,9 +105,9 @@ describe('source URLs', () => {
   });
 
   it('maps user URLs of enabled sources to canonical targets', () => {
-    expect(resolveUserUrl(sources, `https://github.com/zz-test/poc/archive/${SHA}.tar.gz`)?.url).toBe(
-      `https://codeload.github.com/zz-test/poc/tar.gz/${SHA}`,
-    );
+    expect(
+      resolveUserUrl(sources, `https://github.com/zz-test/poc/archive/${SHA}.tar.gz`)?.url,
+    ).toBe(`https://codeload.github.com/zz-test/poc/tar.gz/${SHA}`);
     expect(resolveUserUrl(sources, `https://github.com/zz-test/poc/commit/${SHA}`)?.source).toBe(
       'github-archive',
     );
@@ -141,7 +141,9 @@ describe('source URLs', () => {
   });
 
   it('extracts Exploit-DB IDs from CVE references, including old http links', () => {
-    expect(exploitDbIdFromReference(exploitDb, 'http://www.exploit-db.com/exploits/4242')).toBe('4242');
+    expect(exploitDbIdFromReference(exploitDb, 'http://www.exploit-db.com/exploits/4242')).toBe(
+      '4242',
+    );
     expect(exploitDbIdFromReference(exploitDb, 'https://www.exploit-db.com/search?q=x')).toBeNull();
   });
 });
@@ -188,9 +190,15 @@ describe('names and object keys', () => {
   });
 
   it('parses Content-Disposition and URL names', () => {
-    expect(filenameFromContentDisposition('attachment; filename=poc-main.tar.gz')).toBe('poc-main.tar.gz');
-    expect(filenameFromContentDisposition('attachment; filename="a \\"b\\".txt"')).toBe('a "b".txt');
-    expect(filenameFromContentDisposition("attachment; filename*=UTF-8''%2E%2E%2Fx.sh")).toBe('x.sh');
+    expect(filenameFromContentDisposition('attachment; filename=poc-main.tar.gz')).toBe(
+      'poc-main.tar.gz',
+    );
+    expect(filenameFromContentDisposition('attachment; filename="a \\"b\\".txt"')).toBe(
+      'a "b".txt',
+    );
+    expect(filenameFromContentDisposition("attachment; filename*=UTF-8''%2E%2E%2Fx.sh")).toBe(
+      'x.sh',
+    );
     expect(filenameFromUrl('https://codeload.github.com/o/r/tar.gz/abc')).toBe('abc');
   });
 
@@ -215,7 +223,9 @@ describe('scan and lifecycle rules', () => {
         required,
       ),
     ).toBe('clean');
-    expect(aggregateScanStatus([{ scanner: 'clamav', verdict: 'clean' }], required)).toBe('incomplete');
+    expect(aggregateScanStatus([{ scanner: 'clamav', verdict: 'clean' }], required)).toBe(
+      'incomplete',
+    );
     expect(
       aggregateScanStatus(
         [
@@ -266,15 +276,32 @@ describe('scan and lifecycle rules', () => {
   });
 
   it('never releases what is not clean, and revokes releases that stop qualifying', () => {
-    const clean = { lifecycleStatus: 'quarantined', scanStatus: 'clean', verificationStatus: 'unverified' } as const;
+    const clean = {
+      lifecycleStatus: 'quarantined',
+      scanStatus: 'clean',
+      verificationStatus: 'unverified',
+    } as const;
     expect(isReleasable(clean)).toBe(true);
     expect(checkLifecycleChange(clean, 'released')).toBeNull();
-    for (const scanStatus of ['pending', 'scanning', 'suspicious', 'malicious', 'incomplete', 'integrity-failure'] as const) {
+    for (const scanStatus of [
+      'pending',
+      'scanning',
+      'suspicious',
+      'malicious',
+      'incomplete',
+      'integrity-failure',
+    ] as const) {
       expect(checkLifecycleChange({ ...clean, scanStatus }, 'released')).toMatch(/scan status/);
     }
-    expect(checkLifecycleChange({ ...clean, verificationStatus: 'malicious' }, 'released')).toMatch(/malicious/);
-    expect(checkLifecycleChange({ ...clean, lifecycleStatus: 'rejected' }, 'released')).toMatch(/cannot change/);
-    expect(mustRevokeRelease({ ...clean, lifecycleStatus: 'released', scanStatus: 'malicious' })).toBe(true);
+    expect(checkLifecycleChange({ ...clean, verificationStatus: 'malicious' }, 'released')).toMatch(
+      /malicious/,
+    );
+    expect(checkLifecycleChange({ ...clean, lifecycleStatus: 'rejected' }, 'released')).toMatch(
+      /cannot change/,
+    );
+    expect(
+      mustRevokeRelease({ ...clean, lifecycleStatus: 'released', scanStatus: 'malicious' }),
+    ).toBe(true);
     expect(mustRevokeRelease({ ...clean, lifecycleStatus: 'released' })).toBe(false);
   });
 });

@@ -24,7 +24,12 @@ const as = (role: Role | 'none') => headers[role] ?? {};
 beforeAll(async () => {
   issuer = await createTestTokenIssuer();
   t = await startDownloadApp(issuer);
-  for (const role of ['viewer', 'security-analyst', 'vulnerability-researcher', 'administrator'] as const) {
+  for (const role of [
+    'viewer',
+    'security-analyst',
+    'vulnerability-researcher',
+    'administrator',
+  ] as const) {
     headers[role] = { authorization: `Bearer ${await issuer.tokenFor(randomUUID(), [role])}` };
   }
   headers.none = { authorization: `Bearer ${await issuer.tokenFor(randomUUID(), [])}` };
@@ -76,7 +81,10 @@ describe('authorization', () => {
   it('security analysts read requests but cannot schedule, inspect or manage quarantine', async () => {
     await t.http.get('/api/v1/download-sources').set(as('security-analyst')).expect(200);
     await t.http.post('/api/v1/download-requests').set(as('security-analyst')).send({}).expect(403);
-    await t.http.get(`/api/v1/download-artifacts/${ID}/scans`).set(as('security-analyst')).expect(403);
+    await t.http
+      .get(`/api/v1/download-artifacts/${ID}/scans`)
+      .set(as('security-analyst'))
+      .expect(403);
     await t.http
       .post(`/api/v1/download-artifacts/${ID}/lifecycle`)
       .set(as('security-analyst'))
@@ -85,7 +93,10 @@ describe('authorization', () => {
   });
 
   it('vulnerability researchers schedule downloads but cannot release, reject or rescan', async () => {
-    for (const path of [`/api/v1/download-artifacts/${ID}/lifecycle`, `/api/v1/download-artifacts/${ID}/rescan`]) {
+    for (const path of [
+      `/api/v1/download-artifacts/${ID}/lifecycle`,
+      `/api/v1/download-artifacts/${ID}/rescan`,
+    ]) {
       const res = await t.http
         .post(path)
         .set(as('vulnerability-researcher'))
@@ -98,8 +109,13 @@ describe('authorization', () => {
 
 describe('sources', () => {
   it('lists approved sources with their allowlists and limits', async () => {
-    const res = await t.http.get('/api/v1/download-sources').set(as('security-analyst')).expect(200);
-    const sources = (res.body as { data: unknown[] }).data.map((item) => downloadSourceStatusSchema.parse(item));
+    const res = await t.http
+      .get('/api/v1/download-sources')
+      .set(as('security-analyst'))
+      .expect(200);
+    const sources = (res.body as { data: unknown[] }).data.map((item) =>
+      downloadSourceStatusSchema.parse(item),
+    );
     expect(sources.map((source) => [source.source, source.enabled])).toEqual([
       ['github-archive', true],
       ['exploit-db', false],
@@ -115,10 +131,17 @@ describe('validation', () => {
     [{ pocArtifactId: 'x' }, 'pocArtifactId'],
     [{ url: `https://github.com/zz-test/poc/commit/${SHA}`, priority: 0 }, 'priority'],
     [{ url: `https://github.com/zz-test/poc/commit/${SHA}`, cveIds: ['CVE-1'] }, 'cveIds.0'],
-    [{ url: `https://github.com/zz-test/poc/commit/${SHA}`, scheduledFor: 'tomorrow' }, 'scheduledFor'],
+    [
+      { url: `https://github.com/zz-test/poc/commit/${SHA}`, scheduledFor: 'tomorrow' },
+      'scheduledFor',
+    ],
     [{ url: `https://github.com/zz-test/poc/commit/${SHA}`, extra: true }, ''],
   ])('POST /download-requests rejects %j', async (body, field) => {
-    const res = await t.http.post('/api/v1/download-requests').set(as('vulnerability-researcher')).send(body).expect(400);
+    const res = await t.http
+      .post('/api/v1/download-requests')
+      .set(as('vulnerability-researcher'))
+      .send(body)
+      .expect(400);
     expect(errorOf(res.body).details?.map((detail) => detail.path)).toContain(field);
   });
 
@@ -131,7 +154,11 @@ describe('validation', () => {
     'file:///etc/passwd',
     'https://www.exploit-db.com/exploits/1234',
   ])('refuses %s: not an enabled source (422, nothing is fetched)', async (url) => {
-    const res = await t.http.post('/api/v1/download-requests').set(as('vulnerability-researcher')).send({ url }).expect(422);
+    const res = await t.http
+      .post('/api/v1/download-requests')
+      .set(as('vulnerability-researcher'))
+      .send({ url })
+      .expect(422);
     expect(errorOf(res.body).details?.[0]?.path).toBe('url');
   });
 

@@ -25,17 +25,20 @@ export class MockSource {
   }
 
   async start(): Promise<void> {
-    this.server = createServer({ key: this.certificate.key, cert: this.certificate.cert }, (req, res) => {
-      const host = (req.headers.host ?? '').split(':')[0] ?? '';
-      const path = req.url ?? '/';
-      this.requests.push({ host, path, headers: req.headers });
-      const handler = this.routes.get(`${host}${path}`);
-      if (handler === undefined) {
-        res.writeHead(404).end('not found');
-        return;
-      }
-      handler(req, res);
-    });
+    this.server = createServer(
+      { key: this.certificate.key, cert: this.certificate.cert },
+      (req, res) => {
+        const host = (req.headers.host ?? '').split(':')[0] ?? '';
+        const path = req.url ?? '/';
+        this.requests.push({ host, path, headers: req.headers });
+        const handler = this.routes.get(`${host}${path}`);
+        if (handler === undefined) {
+          res.writeHead(404).end('not found');
+          return;
+        }
+        handler(req, res);
+      },
+    );
     await new Promise<void>((resolve) => this.server?.listen(0, '127.0.0.1', resolve));
     this.port = (this.server.address() as AddressInfo).port;
   }
@@ -62,7 +65,10 @@ export function mapResolver(entries: Record<string, readonly string[]>): Resolve
     const addresses = entries[hostname];
     if (addresses === undefined) return Promise.reject(new Error(`ENOTFOUND ${hostname}`));
     return Promise.resolve(
-      addresses.map((address) => ({ address, family: address.includes(':') ? (6 as const) : (4 as const) })),
+      addresses.map((address) => ({
+        address,
+        family: address.includes(':') ? (6 as const) : (4 as const),
+      })),
     );
   };
 }

@@ -164,7 +164,8 @@ export async function applyStatusChange(
   const next = {
     lifecycleStatus: artifact.lifecycleStatus,
     scanStatus: SCAN_STATUS_TO_API[status.scanStatus ?? artifact.scanStatus],
-    verificationStatus: VERIFICATION_TO_API[status.verificationStatus ?? artifact.verificationStatus],
+    verificationStatus:
+      VERIFICATION_TO_API[status.verificationStatus ?? artifact.verificationStatus],
   };
   const changes: Prisma.StoredArtifactUpdateInput = { ...extra, ...status };
   if (mustRevokeRelease(next)) {

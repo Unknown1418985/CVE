@@ -1,6 +1,6 @@
 # Download Service
 
-Secure, controlled artifact downloading and MinIO storage.
+Secure, controlled artifact downloading, scanning and MinIO storage (Phase 6).
 
 - Package: `@cve/download-service`
 - Default port: `4006`
@@ -8,45 +8,40 @@ Secure, controlled artifact downloading and MinIO storage.
 
 ## Responsibilities
 
-- Source allowlists, URL/redirect validation, DNS resolution and private-network blocking.
-- Size limits, timeouts, content-type validation, SHA-256 hashing and duplicate detection.
-- Malware scanning, quarantine before release and MinIO storage with generated keys.
-- Never executes downloaded files and never extracts archives automatically.
+- Downloads PoC artifacts from approved sources (GitHub archives, Exploit-DB). Downloads start
+  automatically from PoC Service events, or a user requests one, possibly scheduled for later.
+- Prevents SSRF:
+  - source allowlists, https only;
+  - DNS answers checked against private, loopback, link-local and reserved ranges;
+  - sockets pinned to the checked address;
+  - every redirect validated again.
+- Enforces limits while streaming: timeouts, size limits, content-type and magic-byte checks. It
+  computes SHA-256 and detects duplicates.
+- Stores every artifact in MinIO quarantine under a generated key.
+- Scans artifacts with ClamAV and YARA. It manages the lifecycle (quarantined, released, rejected)
+  and keeps the full download provenance.
+- Never executes downloaded files, never extracts archives and never previews content.
+- A successful download is never reported as verified.
 
-## Current status (Phase 0)
-
-Only the service skeleton exists: configuration validation, structured logging, security
-headers, correlation IDs, the error envelope and health endpoints. No business features are
-implemented yet.
+See [docs/download-service.md](../../docs/download-service.md) for the design, security controls,
+lifecycle, API, events, configuration and tests.
 
 ## Endpoints
 
-| Method | Path                   | Description                                                      |
-| ------ | ---------------------- | ---------------------------------------------------------------- |
-| GET    | `/api/v1/health/live`  | Liveness probe                                                   |
-| GET    | `/api/v1/health/ready` | Readiness probe; TCP reachability of PostgreSQL, RabbitMQ, Redis |
-| GET    | `/api/v1/health`       | Same as readiness                                                |
-| GET    | `/api/v1/docs`         | OpenAPI UI (only when `SWAGGER_ENABLED=true`)                    |
-
-## Configuration
-
-| Variable                  | Required | Default       |
-| ------------------------- | -------- | ------------- |
-| `DATABASE_URL`            | yes      |               |
-| `RABBITMQ_URL`            | yes      |               |
-| `REDIS_URL`               | yes      |               |
-| `PORT`                    | no       | `4006`        |
-| `HOST`                    | no       | `0.0.0.0`     |
-| `NODE_ENV`                | no       | `development` |
-| `LOG_LEVEL`               | no       | `info`        |
-| `CORS_ALLOWED_ORIGINS`    | no       | none          |
-| `SWAGGER_ENABLED`         | no       | `false`       |
-| `HEALTH_CHECK_TIMEOUT_MS` | no       | `2000`        |
+| Method   | Path                          | Description                                                |
+| -------- | ----------------------------- | ---------------------------------------------------------- |
+| GET      | `/api/v1/health/live`         | Liveness probe                                             |
+| GET      | `/api/v1/health/ready`        | Readiness: PostgreSQL, MinIO, Redis, RabbitMQ (+ scanners) |
+| GET      | `/api/v1/download-sources`    | Approved sources and their limits                          |
+| GET/POST | `/api/v1/download-requests*`  | Download requests, attempts, retry, cancel                 |
+| GET/POST | `/api/v1/download-artifacts*` | Artifacts, scans, lifecycle, rescan, released content      |
+| GET      | `/api/v1/docs`                | OpenAPI UI (only when `SWAGGER_ENABLED=true`)              |
 
 ## Scripts
 
 ```bash
-pnpm --filter @cve/download-service dev        # watch mode (reads ../../.env)
+pnpm --filter @cve/download-service dev               # watch mode (needs clamd and yara for clean scans)
 pnpm --filter @cve/download-service test
+pnpm --filter @cve/download-service test:integration  # PostgreSQL, Redis, MinIO, clamd, yara
 pnpm --filter @cve/download-service typecheck
 ```

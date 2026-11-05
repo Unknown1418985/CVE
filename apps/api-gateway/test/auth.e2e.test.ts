@@ -471,7 +471,9 @@ describe('Download Service routes', () => {
       })
       .expect(200);
     expect(Buffer.compare(response.body as Buffer, content)).toBe(0);
-    expect(response.headers['content-disposition']).toBe(`attachment; filename="artifact-${id}.gz"`);
+    expect(response.headers['content-disposition']).toBe(
+      `attachment; filename="artifact-${id}.gz"`,
+    );
     expect(response.headers['x-content-type-options']).toBe('nosniff');
     expect(response.headers['content-security-policy']).toContain('sandbox');
     expect(response.headers['x-artifact-sha256']).toBe('a'.repeat(64));

@@ -37,35 +37,56 @@ describe('download-service environment', () => {
     expect(() => downloadTestEnv({ DOWNLOAD_SOURCES_ENABLED: 'github-archive,pastebin' })).toThrow(
       /not approved download sources: pastebin/,
     );
-    expect(() => downloadTestEnv({ SCAN_REQUIRED_SCANNERS: 'virustotal' })).toThrow(/not approved scanners/);
+    expect(() => downloadTestEnv({ SCAN_REQUIRED_SCANNERS: 'virustotal' })).toThrow(
+      /not approved scanners/,
+    );
   });
 
   it('requires automatic sources to be enabled', () => {
     expect(() =>
-      downloadTestEnv({ DOWNLOAD_SOURCES_ENABLED: 'github-archive', DOWNLOAD_AUTOMATIC_SOURCES: 'exploit-db' }),
+      downloadTestEnv({
+        DOWNLOAD_SOURCES_ENABLED: 'github-archive',
+        DOWNLOAD_AUTOMATIC_SOURCES: 'exploit-db',
+      }),
     ).toThrow(/automatic sources must be enabled/);
   });
 
   it('accepts only https source origins without credentials or paths', () => {
-    for (const value of ['http://codeload.github.com', 'https://u:p@codeload.github.com', 'https://codeload.github.com/x']) {
-      expect(() => downloadTestEnv({ DOWNLOAD_GITHUB_ARCHIVE_URL: value })).toThrow(EnvValidationError);
+    for (const value of [
+      'http://codeload.github.com',
+      'https://u:p@codeload.github.com',
+      'https://codeload.github.com/x',
+    ]) {
+      expect(() => downloadTestEnv({ DOWNLOAD_GITHUB_ARCHIVE_URL: value })).toThrow(
+        EnvValidationError,
+      );
     }
     expect(() =>
-      downloadTestEnv({ NODE_ENV: 'production', DOWNLOAD_GITHUB_ARCHIVE_URL: 'https://codeload.github.com:8443' }),
+      downloadTestEnv({
+        NODE_ENV: 'production',
+        DOWNLOAD_GITHUB_ARCHIVE_URL: 'https://codeload.github.com:8443',
+      }),
     ).toThrow(/default https port/);
   });
 
   it('builds host allowlists from the base URL plus configured extras', () => {
     const sources = buildSourcePolicies(
-      downloadTestEnv({ DOWNLOAD_SOURCES_ENABLED: 'github-archive,exploit-db', DOWNLOAD_AUTOMATIC_SOURCES: 'github-archive' }),
+      downloadTestEnv({
+        DOWNLOAD_SOURCES_ENABLED: 'github-archive,exploit-db',
+        DOWNLOAD_AUTOMATIC_SOURCES: 'github-archive',
+      }),
     );
-    expect(sources.find((s) => s.source === 'github-archive')?.allowedHosts).toEqual(['codeload.github.com']);
+    expect(sources.find((s) => s.source === 'github-archive')?.allowedHosts).toEqual([
+      'codeload.github.com',
+    ]);
     expect(sources.find((s) => s.source === 'exploit-db')).toMatchObject({
       enabled: true,
       automatic: false,
       allowedHosts: ['www.exploit-db.com', 'exploit-db.com'],
     });
-    expect(() => downloadTestEnv({ DOWNLOAD_GITHUB_ARCHIVE_EXTRA_HOSTS: '10.0.0.1' })).toThrow(EnvValidationError);
+    expect(() => downloadTestEnv({ DOWNLOAD_GITHUB_ARCHIVE_EXTRA_HOSTS: '10.0.0.1' })).toThrow(
+      EnvValidationError,
+    );
   });
 
   it('requires absolute scanner paths', () => {

@@ -76,7 +76,12 @@ export class MemoryObjectStore implements ArtifactObjectStore {
     return Promise.resolve(body === undefined ? null : { sizeBytes: body.length, sha256: null });
   }
 
-  copy(input: { fromBucket: string; fromKey: string; toBucket: string; toKey: string }): Promise<void> {
+  copy(input: {
+    fromBucket: string;
+    fromKey: string;
+    toBucket: string;
+    toKey: string;
+  }): Promise<void> {
     const body = this.objects.get(`${input.fromBucket}/${input.fromKey}`);
     if (body === undefined) return Promise.reject(new Error('NoSuchKey'));
     this.objects.set(`${input.toBucket}/${input.toKey}`, body);
@@ -148,10 +153,21 @@ export function createTestCertificate(hosts: readonly string[]): TestCertificate
     execFileSync(
       'openssl',
       [
-        'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
-        '-subj', '/CN=download-service-test',
-        '-addext', `subjectAltName=${hosts.map((host) => `DNS:${host}`).join(',')}`,
-        '-keyout', key, '-out', cert,
+        'req',
+        '-x509',
+        '-newkey',
+        'rsa:2048',
+        '-nodes',
+        '-days',
+        '1',
+        '-subj',
+        '/CN=download-service-test',
+        '-addext',
+        `subjectAltName=${hosts.map((host) => `DNS:${host}`).join(',')}`,
+        '-keyout',
+        key,
+        '-out',
+        cert,
       ],
       { stdio: 'pipe' },
     );

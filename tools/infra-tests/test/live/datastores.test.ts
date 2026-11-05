@@ -114,7 +114,11 @@ describe.runIf(devPorts)('MinIO bucket policies', () => {
     ).rejects.toThrow(denied);
     await expect(
       poc.send(
-        new PutObjectCommand({ Bucket: OBJECT_STORAGE_BUCKETS.pocArtifacts, Key: `${key}.x`, Body: body }),
+        new PutObjectCommand({
+          Bucket: OBJECT_STORAGE_BUCKETS.pocArtifacts,
+          Key: `${key}.x`,
+          Body: body,
+        }),
       ),
     ).rejects.toThrow(denied);
     await expect(
