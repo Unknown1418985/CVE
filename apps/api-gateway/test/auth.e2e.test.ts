@@ -394,6 +394,49 @@ describe('PoC Service routes', () => {
   });
 });
 
+describe('Exploit Service routes', () => {
+  const id = '00000000-0000-4000-8000-000000000003';
+
+  it('maps exploit reads and writes, and catalog routes, to their permissions', async () => {
+    const app = await start(backend(ok));
+    const viewer = await issuer.tokenFor(randomUUID(), ['viewer']);
+    const analyst = await issuer.tokenFor(randomUUID(), ['security-analyst']);
+    const researcher = await issuer.tokenFor(randomUUID(), ['vulnerability-researcher']);
+    const admin = await issuer.tokenFor(randomUUID(), ['administrator']);
+
+    await app.http.get('/api/v1/exploits').expect(401);
+    await app.http.get('/api/v1/exploits?cveId=CVE-2026-900001').set(bearer(viewer)).expect(200);
+    await app.http.get('/api/v1/exploit-assessments/statistics').set(bearer(analyst)).expect(200);
+    await app.http.post('/api/v1/exploits').set(bearer(analyst)).send({}).expect(403);
+    await app.http.post('/api/v1/exploits').set(bearer(researcher)).send({}).expect(200);
+    await app.http
+      .patch(`/api/v1/exploit-associations/${id}`)
+      .set(bearer(viewer))
+      .send({})
+      .expect(403);
+    await app.http
+      .post(`/api/v1/exploitation-evidence/${id}/withdraw`)
+      .set(bearer(researcher))
+      .send({})
+      .expect(200);
+    await app.http.delete(`/api/v1/exploits/${id}`).set(bearer(admin)).expect(404);
+    await app.http.get('/api/v1/exploit-sources').set(bearer(viewer)).expect(403);
+    await app.http.get('/api/v1/exploit-sync-runs').set(bearer(analyst)).expect(200);
+    await app.http.post('/api/v1/exploit-sync-runs').set(bearer(analyst)).send({}).expect(403);
+    await app.http.post('/api/v1/exploit-sync-runs').set(bearer(researcher)).send({}).expect(403);
+    await app.http.post('/api/v1/exploit-sync-runs').set(bearer(admin)).send({}).expect(200);
+
+    expect(forwarded.map((request) => `${request.method} ${request.url}`)).toEqual([
+      'GET http://exploit-service.internal:4000/api/v1/exploits?cveId=CVE-2026-900001',
+      'GET http://exploit-service.internal:4000/api/v1/exploit-assessments/statistics',
+      'POST http://exploit-service.internal:4000/api/v1/exploits',
+      `POST http://exploit-service.internal:4000/api/v1/exploitation-evidence/${id}/withdraw`,
+      'GET http://exploit-service.internal:4000/api/v1/exploit-sync-runs',
+      'POST http://exploit-service.internal:4000/api/v1/exploit-sync-runs',
+    ]);
+  });
+});
+
 describe('Download Service routes', () => {
   const id = '00000000-0000-4000-8000-000000000002';
 

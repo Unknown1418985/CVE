@@ -15,7 +15,7 @@
     "dev": "turbo run dev --parallel",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
-    "lint": "eslint . --max-warnings=0",
+    "lint": "node --max-old-space-size=4096 node_modules/eslint/bin/eslint.js . --max-warnings=0",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

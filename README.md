@@ -130,6 +130,7 @@ Run a single workspace with `pnpm --filter @cve/<name> <script>`.
 - [Messaging and background jobs](docs/messaging.md)
 - [Identity, authentication and authorization](docs/identity.md)
 - [CVE Service](docs/cve-service.md)
+- [Exploit Service](docs/exploit-service.md)
 - [Development specification](CLAUDE.md)
 
 ## Roadmap
@@ -143,7 +144,7 @@ Run a single workspace with `pnpm --filter @cve/<name> <script>`.
 | 4     | Asset and product intelligence                       | Planned    |
 | 5     | PoC discovery and metadata management                | Planned    |
 | 6     | Secure automated downloads and MinIO storage         | Planned    |
-| 7     | Exploit intelligence                                 | Planned    |
+| 7     | Exploit intelligence                                 | Done (API) |
 | 8     | Dashboard and analytics                              | Planned    |
 | 9     | Reporting and notifications                          | Planned    |
 | 10    | Production hardening, backup, monitoring, deployment | Planned    |
