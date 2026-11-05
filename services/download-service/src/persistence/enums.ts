@@ -36,14 +36,15 @@ export const VERIFICATION_TO_DB = {
   malicious: 'malicious',
 } as const satisfies Record<ArtifactVerificationStatus, DbVerificationStatus>;
 
-export const VERIFICATION_TO_API: Readonly<Record<DbVerificationStatus, ArtifactVerificationStatus>> =
-  {
-    unverified: 'unverified',
-    in_review: 'in-review',
-    verified: 'verified',
-    rejected: 'rejected',
-    malicious: 'malicious',
-  };
+export const VERIFICATION_TO_API: Readonly<
+  Record<DbVerificationStatus, ArtifactVerificationStatus>
+> = {
+  unverified: 'unverified',
+  in_review: 'in-review',
+  verified: 'verified',
+  rejected: 'rejected',
+  malicious: 'malicious',
+};
 
 export const VERDICT_TO_DB = {
   clean: 'clean',

@@ -37,7 +37,12 @@ export interface ArtifactObjectStore {
   }): Promise<void>;
   getStream(bucket: string, key: string, signal?: AbortSignal): Promise<Readable>;
   head(bucket: string, key: string): Promise<StoredObjectInfo | null>;
-  copy(input: { fromBucket: string; fromKey: string; toBucket: string; toKey: string }): Promise<void>;
+  copy(input: {
+    fromBucket: string;
+    fromKey: string;
+    toBucket: string;
+    toKey: string;
+  }): Promise<void>;
   delete(bucket: string, key: string): Promise<void>;
   ping(bucket: string): Promise<void>;
 }

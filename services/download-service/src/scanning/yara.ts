@@ -37,7 +37,7 @@ function run(
       },
       (error, stdout, stderr) => {
         if (error !== null && typeof error.code !== 'number') {
-          reject(error);
+          reject(new Error(`yara could not run: ${error.message}`, { cause: error }));
           return;
         }
         resolve({ stdout, stderr, code: error === null ? 0 : Number(error.code) });
@@ -79,7 +79,8 @@ export class YaraCliScanner implements FileScanner {
         () => null,
       ),
       readFile(this.options.rulesPath).then(
-        (content) => `rules sha256:${createHash('sha256').update(content).digest('hex').slice(0, 16)}`,
+        (content) =>
+          `rules sha256:${createHash('sha256').update(content).digest('hex').slice(0, 16)}`,
         () => null,
       ),
     ]);
@@ -113,7 +114,12 @@ export class YaraCliScanner implements FileScanner {
         };
       }
       const findings = parseYaraOutput(result.stdout, path);
-      return { ...base, verdict: findings.length > 0 ? 'suspicious' : 'clean', findings, error: null };
+      return {
+        ...base,
+        verdict: findings.length > 0 ? 'suspicious' : 'clean',
+        findings,
+        error: null,
+      };
     } catch (error) {
       return {
         ...base,

@@ -15,11 +15,21 @@ import {
 import type { Logger } from '@cve/logger';
 
 import { detectFileType, FILE_TYPE_MIME, riskIndicators } from '../domain/file-type.js';
-import { filenameFromContentDisposition, filenameFromUrl, quarantineKey } from '../domain/naming.js';
+import {
+  filenameFromContentDisposition,
+  filenameFromUrl,
+  quarantineKey,
+} from '../domain/naming.js';
 import type { SourcePolicy } from '../domain/sources.js';
 import { downloadEvent, systemContext } from '../events/download-events.js';
 import type { DownloadRequest, PrismaClient } from '../generated/prisma/client.js';
-import { isUniqueViolation, toJson, TX_OPTIONS, writeOutbox, type Tx } from '../persistence/database.js';
+import {
+  isUniqueViolation,
+  toJson,
+  TX_OPTIONS,
+  writeOutbox,
+  type Tx,
+} from '../persistence/database.js';
 import type { ArtifactObjectStore } from '../storage/object-store.js';
 import { DownloadError } from './errors.js';
 import { refreshVerification, deleteReleasedCopies, type LifecycleChange } from './lifecycle.js';
@@ -75,7 +85,10 @@ export class DownloadEngine {
   }
 
   /** Marks the request as downloading; null when another worker has it or it is finished. */
-  private async claim(requestId: string, context: DownloadJobContext): Promise<DownloadRequest | null> {
+  private async claim(
+    requestId: string,
+    context: DownloadJobContext,
+  ): Promise<DownloadRequest | null> {
     const leaseUntil = new Date(Date.now() + this.options.totalTimeoutMs + 60_000);
     const [claimed] = await this.options.prisma.$queryRaw<{ id: string }[]>`
       UPDATE "download_requests"
@@ -89,11 +102,18 @@ export class DownloadEngine {
     return this.options.prisma.downloadRequest.findUniqueOrThrow({ where: { id: requestId } });
   }
 
-  async run(requestId: string, context: DownloadJobContext, signal: AbortSignal): Promise<DownloadOutcome> {
+  async run(
+    requestId: string,
+    context: DownloadJobContext,
+    signal: AbortSignal,
+  ): Promise<DownloadOutcome> {
     const { prisma, logger } = this.options;
     const request = await this.claim(requestId, context);
     if (request === null) {
-      return { status: 'skipped', reason: 'the request is not pending (finished, cancelled or running elsewhere)' };
+      return {
+        status: 'skipped',
+        reason: 'the request is not pending (finished, cancelled or running elsewhere)',
+      };
     }
     const attempt = await prisma.downloadAttempt.create({
       data: { requestId, attempt: request.attempts, jobId: context.jobId, hops: [] },
@@ -104,8 +124,12 @@ export class DownloadEngine {
     await mkdir(this.options.stagingDir, { recursive: true, mode: 0o700 });
     const staging = join(this.options.stagingDir, `${randomUUID()}.part`);
     try {
-      if (policy === undefined || !policy.enabled) {
-        throw new DownloadError('source-disabled', `The source ${request.source} is not enabled`, false);
+      if (!policy?.enabled) {
+        throw new DownloadError(
+          'source-disabled',
+          `The source ${request.source} is not enabled`,
+          false,
+        );
       }
       const result = await this.options.fetcher.fetchToFile(
         request.sourceUrl,
@@ -122,14 +146,31 @@ export class DownloadEngine {
           { hops: result.hops, httpStatus: result.httpStatus, bytesReceived: result.bytes },
         );
       }
-      const outcome = await this.store(request, attempt.id, result, detected, staging, started, log);
-      log.info({ status: outcome.status, artifactId: outcome.artifactId, bytes: result.bytes }, 'download finished');
+      const outcome = await this.store(
+        request,
+        attempt.id,
+        result,
+        detected,
+        staging,
+        started,
+        log,
+      );
+      log.info(
+        { status: outcome.status, artifactId: outcome.artifactId, bytes: result.bytes },
+        'download finished',
+      );
       return outcome;
     } catch (error) {
       const failure =
         error instanceof DownloadError
           ? error
-          : new DownloadError('storage-failure', `Storing the download failed: ${String(error instanceof Error ? error.message : error)}`, true, {}, { cause: error });
+          : new DownloadError(
+              'storage-failure',
+              `Storing the download failed: ${String(error instanceof Error ? error.message : error)}`,
+              true,
+              {},
+              { cause: error },
+            );
       const willRetry = failure.retryable && context.attempt < context.maxAttempts;
       await this.recordFailure(request, attempt.id, failure, willRetry, started);
       log.warn({ err: failure, code: failure.code, willRetry }, 'download attempt failed');
@@ -207,7 +248,16 @@ export class DownloadEngine {
         });
         // A new artifact is quarantined: linking it can never revoke a release.
         await this.linkSource(tx, request, artifactId, result, now);
-        await this.finishRequest(tx, request, attemptId, result, 'stored', artifactId, started, now);
+        await this.finishRequest(
+          tx,
+          request,
+          attemptId,
+          result,
+          'stored',
+          artifactId,
+          started,
+          now,
+        );
         await writeOutbox(tx, [
           downloadEvent(
             DOWNLOAD_EVENT_TYPES.artifactStored,
@@ -237,7 +287,9 @@ export class DownloadEngine {
         throw error;
       }
       await this.deleteOrphan(key, log);
-      const winner = await prisma.storedArtifact.findUniqueOrThrow({ where: { sha256: result.sha256 } });
+      const winner = await prisma.storedArtifact.findUniqueOrThrow({
+        where: { sha256: result.sha256 },
+      });
       return this.recordDuplicate(request, attemptId, result, winner.id, started, now);
     }
     await this.options.scans.enqueueScan(artifactId, 'downloaded').catch((error: unknown) => {
@@ -273,11 +325,25 @@ export class DownloadEngine {
         });
       }
       const linked = await this.linkSource(tx, request, artifactId, result, now);
-      await this.finishRequest(tx, request, attemptId, result, 'duplicate', artifactId, started, now);
+      await this.finishRequest(
+        tx,
+        request,
+        attemptId,
+        result,
+        'duplicate',
+        artifactId,
+        started,
+        now,
+      );
       await writeOutbox(tx, [this.completedEvent(request, 'duplicate', artifactId, result)]);
       return linked;
     }, TX_OPTIONS);
-    await deleteReleasedCopies(this.options.store, this.options.prisma, [change?.releasedKeyToDelete ?? null], this.options.logger);
+    await deleteReleasedCopies(
+      this.options.store,
+      this.options.prisma,
+      [change?.releasedKeyToDelete ?? null],
+      this.options.logger,
+    );
     return { status: 'duplicate', artifactId };
   }
 
@@ -433,4 +499,3 @@ export class DownloadEngine {
     }, TX_OPTIONS);
   }
 }
-

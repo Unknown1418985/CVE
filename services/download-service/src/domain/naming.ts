@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
 /** Control, bidirectional-override and zero-width characters. */
-const UNSAFE_CHARACTERS = /[\p{Cc}\p{Cf}  ]/gu;
+const UNSAFE_CHARACTERS = /[\p{Cc}\p{Cf}\u2028\u2029]/gu;
 
 /**
  * The name a source suggests (Content-Disposition or the last URL segment), reduced to a safe
@@ -37,7 +37,10 @@ export function filenameFromContentDisposition(header: string | null): string | 
 
 export function filenameFromUrl(url: string): string | null {
   try {
-    const segment = new URL(url).pathname.split('/').filter((part) => part !== '').at(-1);
+    const segment = new URL(url).pathname
+      .split('/')
+      .filter((part) => part !== '')
+      .at(-1);
     return sanitizeFilename(segment ?? null);
   } catch {
     return null;

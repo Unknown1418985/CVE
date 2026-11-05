@@ -46,9 +46,12 @@ const BLOCKED_IPV6: readonly (readonly [string, number])[] = [
   ['ff00::', 8], // multicast
 ];
 
-const blockList = new BlockList();
-for (const [address, prefix] of BLOCKED_IPV4) blockList.addSubnet(address, prefix, 'ipv4');
-for (const [address, prefix] of BLOCKED_IPV6) blockList.addSubnet(address, prefix, 'ipv6');
+// Separate lists: Node matches IPv4 addresses against IPv4-mapped IPv6 rules, so a single list
+// with `::ffff:0:0/96` would block every IPv4 address.
+const blockedV4 = new BlockList();
+const blockedV6 = new BlockList();
+for (const [address, prefix] of BLOCKED_IPV4) blockedV4.addSubnet(address, prefix, 'ipv4');
+for (const [address, prefix] of BLOCKED_IPV6) blockedV6.addSubnet(address, prefix, 'ipv6');
 
 /** Expands an IPv6 address to eight 16-bit groups (no zone index). */
 function ipv6Groups(address: string): number[] | null {
@@ -124,7 +127,7 @@ export class AddressPolicy {
     if (family === 0) return { allowed: false, reason: 'not an IP address' };
     const type = family === 4 ? 'ipv4' : 'ipv6';
     if (this.hasExceptions && this.exceptions.check(address, type)) return { allowed: true };
-    if (blockList.check(address, type)) {
+    if ((family === 4 ? blockedV4 : blockedV6).check(address, type)) {
       return { allowed: false, reason: `${address} is in a private, loopback or reserved range` };
     }
     if (family === 6) {
@@ -135,7 +138,7 @@ export class AddressPolicy {
         return { allowed: false, reason: `${address} is not a global unicast address` };
       }
       for (const embedded of embeddedIpv4(address)) {
-        if (blockList.check(embedded, 'ipv4')) {
+        if (blockedV4.check(embedded, 'ipv4')) {
           return { allowed: false, reason: `${address} embeds the blocked address ${embedded}` };
         }
       }

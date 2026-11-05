@@ -191,7 +191,13 @@ export const ARTIFACT_SCANNERS = ['clamav', 'yara'] as const;
 export const artifactScannerSchema = z.enum(ARTIFACT_SCANNERS);
 export type ArtifactScanner = z.infer<typeof artifactScannerSchema>;
 
-export const SCAN_VERDICTS = ['clean', 'suspicious', 'malicious', 'error', 'not-configured'] as const;
+export const SCAN_VERDICTS = [
+  'clean',
+  'suspicious',
+  'malicious',
+  'error',
+  'not-configured',
+] as const;
 export const scanVerdictSchema = z.enum(SCAN_VERDICTS);
 export type ScanVerdict = z.infer<typeof scanVerdictSchema>;
 

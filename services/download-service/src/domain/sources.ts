@@ -111,7 +111,11 @@ export function resolveUserUrl(
       if (host === 'github.com' && parts.length === 4) {
         const [owner = '', name = '', kind = '', ref = ''] = parts;
         const sha =
-          kind === 'archive' ? ref.replace(/\.tar\.gz$/, '') : ['commit', 'tree'].includes(kind) ? ref : '';
+          kind === 'archive'
+            ? ref.replace(/\.tar\.gz$/, '')
+            : ['commit', 'tree'].includes(kind)
+              ? ref
+              : '';
         const target = githubArchiveTarget(policy, `${owner}/${name}`, sha);
         if (target !== null) return target;
       }

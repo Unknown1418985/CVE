@@ -8,13 +8,7 @@ import {
   serviceEnvSchema,
   type EnvSource,
 } from '@cve/config';
-import {
-  ARTIFACT_SCANNERS,
-  DOWNLOAD_SOURCES,
-  SERVICE_DEFAULT_PORTS,
-  type ArtifactScanner,
-  type DownloadSource,
-} from '@cve/contracts';
+import { ARTIFACT_SCANNERS, DOWNLOAD_SOURCES, SERVICE_DEFAULT_PORTS } from '@cve/contracts';
 import { assertServiceOwnsDatabase } from '@cve/database';
 import { z } from 'zod';
 
@@ -180,15 +174,17 @@ export const envSchema = serviceEnvSchema(SERVICE_DEFAULT_PORTS[SERVICE_NAME])
     if (env.NODE_ENV === 'production') {
       for (const key of ['DOWNLOAD_GITHUB_ARCHIVE_URL', 'DOWNLOAD_EXPLOIT_DB_URL'] as const) {
         if (new URL(env[key]).port !== '') {
-          ctx.addIssue({ code: 'custom', path: [key], message: 'must use the default https port in production' });
+          ctx.addIssue({
+            code: 'custom',
+            path: [key],
+            message: 'must use the default https port in production',
+          });
         }
       }
     }
   });
 
 export type Env = z.infer<typeof envSchema>;
-
-export type { ArtifactScanner, DownloadSource };
 
 /** Validates configuration at startup and enforces that this service uses its own database. */
 export function loadServiceEnv(source: EnvSource = process.env): Env {

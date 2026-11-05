@@ -4,7 +4,8 @@ import type { DetectedFileType, DownloadRiskIndicator } from '@cve/contracts';
 export const SNIFF_BYTES = 4_096;
 
 const startsWith = (head: Buffer, bytes: readonly number[], offset = 0) =>
-  head.length >= offset + bytes.length && bytes.every((byte, index) => head[offset + index] === byte);
+  head.length >= offset + bytes.length &&
+  bytes.every((byte, index) => head[offset + index] === byte);
 
 /** True when the bytes look like text (UTF-8 without NUL and with few control characters). */
 function looksLikeText(head: Buffer): boolean {
@@ -16,7 +17,9 @@ function looksLikeText(head: Buffer): boolean {
   }
   if (control / head.length > 0.02) return false;
   // Reject invalid UTF-8 except a sequence cut at the end of the sample.
-  const decoded = new TextDecoder('utf-8', { fatal: false }).decode(head.subarray(0, head.length - 3));
+  const decoded = new TextDecoder('utf-8', { fatal: false }).decode(
+    head.subarray(0, head.length - 3),
+  );
   return !decoded.includes('�');
 }
 

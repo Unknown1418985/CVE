@@ -64,8 +64,9 @@ export async function queueDueRequests(options: {
 }): Promise<number> {
   const now = new Date();
   const jobSuffix = String(now.getTime());
-  const picked = options.requestId === undefined
-    ? await options.prisma.$queryRaw<{ id: string; priority: number }[]>`
+  const picked =
+    options.requestId === undefined
+      ? await options.prisma.$queryRaw<{ id: string; priority: number }[]>`
         UPDATE "download_requests" AS r
            SET "queued_at" = ${now}, "job_id" = 'download.' || r."id" || '.' || ${jobSuffix}
          WHERE r."id" IN (
@@ -75,7 +76,7 @@ export async function queueDueRequests(options: {
                 LIMIT ${options.batchSize}
                   FOR UPDATE SKIP LOCKED)
      RETURNING r."id", r."priority"`
-    : await options.prisma.$queryRaw<{ id: string; priority: number }[]>`
+      : await options.prisma.$queryRaw<{ id: string; priority: number }[]>`
         UPDATE "download_requests" AS r
            SET "queued_at" = ${now}, "job_id" = 'download.' || r."id" || '.' || ${jobSuffix}
          WHERE r."id" = ${options.requestId}::uuid AND r."status" = 'pending'
@@ -158,7 +159,8 @@ export async function runMaintenance(options: MaintenanceOptions) {
     take: RECOVERY_BATCH,
   });
   for (const request of waiting) {
-    const job = request.jobId === null ? undefined : await options.downloads.queue.getJob(request.jobId);
+    const job =
+      request.jobId === null ? undefined : await options.downloads.queue.getJob(request.jobId);
     const state = job === undefined ? 'missing' : await job.getState();
     if (state === 'missing' || state === 'completed' || state === 'failed' || state === 'unknown') {
       await prisma.downloadRequest.updateMany({
@@ -174,7 +176,10 @@ export async function runMaintenance(options: MaintenanceOptions) {
     where: {
       OR: [
         { scanStatus: 'pending', scanQueuedAt: null },
-        { scanStatus: { in: ['pending', 'scanning'] }, scanQueuedAt: { lt: new Date(now.getTime() - 60 * 60_000) } },
+        {
+          scanStatus: { in: ['pending', 'scanning'] },
+          scanQueuedAt: { lt: new Date(now.getTime() - 60 * 60_000) },
+        },
       ],
     },
     select: { id: true },
@@ -199,12 +204,19 @@ export async function runMaintenance(options: MaintenanceOptions) {
     try {
       await options.store.delete(OBJECT_STORAGE_BUCKETS.pocArtifacts, artifact.releasedKey);
       await prisma.storedArtifact.updateMany({
-        where: { id: artifact.id, lifecycleStatus: { not: 'released' }, releasedKey: artifact.releasedKey },
+        where: {
+          id: artifact.id,
+          lifecycleStatus: { not: 'released' },
+          releasedKey: artifact.releasedKey,
+        },
         data: { releasedKey: null },
       });
       releasedCopies += 1;
     } catch (error) {
-      options.logger.warn({ err: error, artifactId: artifact.id }, 'failed to delete a released copy');
+      options.logger.warn(
+        { err: error, artifactId: artifact.id },
+        'failed to delete a released copy',
+      );
     }
   }
 
@@ -212,13 +224,17 @@ export async function runMaintenance(options: MaintenanceOptions) {
     processedEvents: (
       await prisma.processedEvent.deleteMany({
         where: {
-          processedAt: { lt: new Date(now.getTime() - options.processedEventRetentionDays * DAY_MS) },
+          processedAt: {
+            lt: new Date(now.getTime() - options.processedEventRetentionDays * DAY_MS),
+          },
         },
       })
     ).count,
     outboxEvents: (
       await prisma.outboxEvent.deleteMany({
-        where: { publishedAt: { lt: new Date(now.getTime() - options.outboxRetentionDays * DAY_MS) } },
+        where: {
+          publishedAt: { lt: new Date(now.getTime() - options.outboxRetentionDays * DAY_MS) },
+        },
       })
     ).count,
   };
@@ -298,7 +314,11 @@ export class DownloadScheduler implements DownloadJobQueue {
       retry: { attempts: 3, backoffDelayMs: 10_000 },
       timeoutMs: 10 * 60_000,
     });
-    const queueOptions = { connection: options.connection, service: SERVICE_NAME, logger: options.logger } as const;
+    const queueOptions = {
+      connection: options.connection,
+      service: SERVICE_NAME,
+      logger: options.logger,
+    } as const;
     this.downloadQueue = new JobQueue(this.downloadDefinition, queueOptions);
     this.scanQueue = new JobQueue(this.scanDefinition, queueOptions);
     this.schedulingQueue = new JobQueue(this.schedulingDefinition, queueOptions);
@@ -324,13 +344,20 @@ export class DownloadScheduler implements DownloadJobQueue {
       data: { scanQueuedAt: now },
     });
     if (marked.count === 0) return false;
-    await this.scanQueue.add({ artifactId, reason }, { jobId: `scan.${artifactId}.${String(now.getTime())}` });
+    await this.scanQueue.add(
+      { artifactId, reason },
+      { jobId: `scan.${artifactId}.${String(now.getTime())}` },
+    );
     return true;
   }
 
   async start(): Promise<void> {
     const { options } = this;
-    const workerOptions = { connection: options.connection, service: SERVICE_NAME, logger: options.logger } as const;
+    const workerOptions = {
+      connection: options.connection,
+      service: SERVICE_NAME,
+      logger: options.logger,
+    } as const;
     const download = new JobWorker(
       this.downloadDefinition,
       async (payload, context) => {
@@ -351,7 +378,11 @@ export class DownloadScheduler implements DownloadJobQueue {
     const scan = new JobWorker(
       this.scanDefinition,
       async (payload, context) => {
-        const outcome = await options.scanner.run(payload.artifactId, payload.reason, context.signal);
+        const outcome = await options.scanner.run(
+          payload.artifactId,
+          payload.reason,
+          context.signal,
+        );
         if (outcome.status === 'scanned' && outcome.scannerErrors) {
           if (context.attempt < context.maxAttempts) {
             throw new Error('a scanner failed; the scan will be retried');
@@ -392,13 +423,26 @@ export class DownloadScheduler implements DownloadJobQueue {
       this.workers.push(worker);
       await worker.start();
     }
-    await this.schedulingQueue.schedule('schedule', { cron: options.schedulerCron, timezone: 'UTC' }, {});
-    await this.maintenanceQueue.schedule('maintenance', { cron: options.maintenanceCron, timezone: 'UTC' }, {});
+    await this.schedulingQueue.schedule(
+      'schedule',
+      { cron: options.schedulerCron, timezone: 'UTC' },
+      {},
+    );
+    await this.maintenanceQueue.schedule(
+      'maintenance',
+      { cron: options.maintenanceCron, timezone: 'UTC' },
+      {},
+    );
   }
 
   async stop(): Promise<void> {
     for (const worker of this.workers) await worker.close();
-    for (const queue of [this.downloadQueue, this.scanQueue, this.schedulingQueue, this.maintenanceQueue]) {
+    for (const queue of [
+      this.downloadQueue,
+      this.scanQueue,
+      this.schedulingQueue,
+      this.maintenanceQueue,
+    ]) {
       await queue.close();
     }
   }

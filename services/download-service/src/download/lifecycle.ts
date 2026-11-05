@@ -10,9 +10,13 @@ import type { Logger } from '@cve/logger';
 import type { ActorContext } from '../common/request-context.js';
 import { combineVerification, mustRevokeRelease } from '../domain/artifact-rules.js';
 import { downloadEvent } from '../events/download-events.js';
-import type { PrismaClient, StoredArtifact } from '../generated/prisma/client.js';
+import type { Prisma, PrismaClient, StoredArtifact } from '../generated/prisma/client.js';
 import { writeOutbox, type Tx } from '../persistence/database.js';
-import { SCAN_STATUS_TO_API, VERIFICATION_TO_API, VERIFICATION_TO_DB } from '../persistence/enums.js';
+import {
+  SCAN_STATUS_TO_API,
+  VERIFICATION_TO_API,
+  VERIFICATION_TO_DB,
+} from '../persistence/enums.js';
 import type { ArtifactObjectStore } from '../storage/object-store.js';
 
 /** Locks an artifact row for a state change (`SELECT … FOR UPDATE`). */
@@ -40,12 +44,15 @@ export async function changeLifecycle(
   reason: string,
   context: ActorContext,
   release?: { readonly releasedKey: string },
+  /** Other column changes applied in the same update (so CHECK constraints hold throughout). */
+  changes: Prisma.StoredArtifactUpdateInput = {},
 ): Promise<LifecycleChange> {
   const now = new Date();
   const leavingRelease = artifact.lifecycleStatus === 'released' && to !== 'released';
   const updated = await tx.storedArtifact.update({
     where: { id: artifact.id },
     data: {
+      ...changes,
       lifecycleStatus: to,
       ...(to === 'released' && release !== undefined
         ? {
@@ -125,30 +132,57 @@ export async function refreshVerification(
   const combined = combineVerification(
     states.map((state) => VERIFICATION_TO_API[state.verificationStatus]),
   );
-  let current = artifact;
-  if (VERIFICATION_TO_DB[combined] !== artifact.verificationStatus) {
-    current = await tx.storedArtifact.update({
-      where: { id: artifact.id },
-      data: { verificationStatus: VERIFICATION_TO_DB[combined], version: { increment: 1 } },
-    });
+  if (VERIFICATION_TO_DB[combined] === artifact.verificationStatus) {
+    return { artifact, releasedKeyToDelete: null };
   }
-  return revokeIfNeeded(tx, current, `A linked PoC artifact is now ${combined}`, context);
+  return applyStatusChange(
+    tx,
+    artifact,
+    { verificationStatus: VERIFICATION_TO_DB[combined] },
+    {},
+    `a linked PoC artifact is now ${combined}`,
+    context,
+  );
 }
 
-/** Moves a released artifact back to quarantine when it no longer qualifies for release. */
-export async function revokeIfNeeded(
+/**
+ * Applies a scan or verification status change to a locked artifact. When the new state no
+ * longer qualifies a released artifact for release, the release is revoked in the same update:
+ * the database never holds a released artifact with a blocking status.
+ */
+export async function applyStatusChange(
   tx: Tx,
   artifact: StoredArtifact,
+  status: {
+    readonly scanStatus?: StoredArtifact['scanStatus'];
+    readonly verificationStatus?: StoredArtifact['verificationStatus'];
+  },
+  extra: Prisma.StoredArtifactUpdateInput,
   reason: string,
   context: ActorContext,
 ): Promise<LifecycleChange> {
-  const state = {
+  const next = {
     lifecycleStatus: artifact.lifecycleStatus,
-    scanStatus: SCAN_STATUS_TO_API[artifact.scanStatus],
-    verificationStatus: VERIFICATION_TO_API[artifact.verificationStatus],
+    scanStatus: SCAN_STATUS_TO_API[status.scanStatus ?? artifact.scanStatus],
+    verificationStatus: VERIFICATION_TO_API[status.verificationStatus ?? artifact.verificationStatus],
   };
-  if (!mustRevokeRelease(state)) return { artifact, releasedKeyToDelete: null };
-  return changeLifecycle(tx, artifact, 'quarantined', `Release revoked: ${reason}`, context);
+  const changes: Prisma.StoredArtifactUpdateInput = { ...extra, ...status };
+  if (mustRevokeRelease(next)) {
+    return changeLifecycle(
+      tx,
+      artifact,
+      'quarantined',
+      `Release revoked: ${reason}`,
+      context,
+      undefined,
+      changes,
+    );
+  }
+  const updated = await tx.storedArtifact.update({
+    where: { id: artifact.id },
+    data: { ...changes, version: { increment: 1 } },
+  });
+  return { artifact: updated, releasedKeyToDelete: null };
 }
 
 /**
@@ -158,7 +192,7 @@ export async function revokeIfNeeded(
 export async function deleteReleasedCopies(
   store: ArtifactObjectStore,
   prisma: PrismaClient,
-  copies: readonly (LifecycleChange["releasedKeyToDelete"])[],
+  copies: readonly LifecycleChange['releasedKeyToDelete'][],
   logger: Logger,
 ): Promise<void> {
   for (const copy of copies) {
@@ -166,11 +200,14 @@ export async function deleteReleasedCopies(
     try {
       await store.delete(OBJECT_STORAGE_BUCKETS.pocArtifacts, copy.key);
       await prisma.storedArtifact.updateMany({
-        where: { id: copy.artifactId, releasedKey: copy.key, lifecycleStatus: { not: "released" } },
+        where: { id: copy.artifactId, releasedKey: copy.key, lifecycleStatus: { not: 'released' } },
         data: { releasedKey: null },
       });
     } catch (error) {
-      logger.warn({ err: error, key: copy.key }, "failed to delete a released copy; maintenance will retry");
+      logger.warn(
+        { err: error, key: copy.key },
+        'failed to delete a released copy; maintenance will retry',
+      );
     }
   }
 }

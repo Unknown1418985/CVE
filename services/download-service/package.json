@@ -7,7 +7,8 @@
   "files": [
     "dist",
     "prisma",
-    "prisma.config.ts"
+    "prisma.config.ts",
+    "yara"
   ],
   "scripts": {
     "build": "pnpm prisma:generate && tsc -p tsconfig.build.json",

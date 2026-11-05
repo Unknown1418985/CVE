@@ -22,7 +22,7 @@ export interface ResolvedAddress {
 export type Resolver = (hostname: string) => Promise<readonly ResolvedAddress[]>;
 
 export const systemResolver: Resolver = async (hostname) => {
-  const answers = await dnsLookup(hostname, { all: true, verbatim: true });
+  const answers = await dnsLookup(hostname, { all: true, order: 'verbatim' });
   return answers.map((answer) => ({
     address: answer.address,
     family: answer.family === 6 ? 6 : 4,
@@ -70,7 +70,12 @@ export interface FetchResult {
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
 /** Validates one hop's URL against the source policy. Throws a non-retryable DownloadError. */
-export function checkUrl(raw: string, policy: FetchPolicy, hops: DownloadHop[], redirect: boolean): URL {
+export function checkUrl(
+  raw: string,
+  policy: FetchPolicy,
+  hops: DownloadHop[],
+  redirect: boolean,
+): URL {
   const code = redirect ? 'invalid-redirect' : 'url-not-allowed';
   let url: URL;
   try {
@@ -153,7 +158,7 @@ const NETWORK_RETRYABLE = new Set([
 
 function errorCode(error: unknown): string | undefined {
   return typeof error === 'object' && error !== null && 'code' in error
-    ? String((error as { code: unknown }).code)
+    ? String(error.code)
     : undefined;
 }
 
@@ -161,20 +166,47 @@ function errorCode(error: unknown): string | undefined {
 function classify(error: unknown, signal: AbortSignal, deadline: AbortSignal): DownloadError {
   if (error instanceof DownloadError) return error;
   if (deadline.aborted) {
-    return new DownloadError('timeout', 'The download exceeded its time limit', true, {}, { cause: error });
+    return new DownloadError(
+      'timeout',
+      'The download exceeded its time limit',
+      true,
+      {},
+      { cause: error },
+    );
   }
   if (signal.aborted) {
     return new DownloadError('timeout', 'The download was aborted', true, {}, { cause: error });
   }
   const code = errorCode(error);
   const message = error instanceof Error ? error.message : String(error);
-  if (code !== undefined && /^(ERR_TLS|CERT_|UNABLE_TO|DEPTH_ZERO|SELF_SIGNED|ERR_SSL|HOSTNAME_MISMATCH)/.test(code)) {
-    return new DownloadError('tls-failure', `TLS verification failed: ${message}`, false, {}, { cause: error });
+  if (
+    code !== undefined &&
+    /^(ERR_TLS|CERT_|UNABLE_TO|DEPTH_ZERO|SELF_SIGNED|ERR_SSL|HOSTNAME_MISMATCH)/.test(code)
+  ) {
+    return new DownloadError(
+      'tls-failure',
+      `TLS verification failed: ${message}`,
+      false,
+      {},
+      { cause: error },
+    );
   }
   if (code !== undefined && NETWORK_RETRYABLE.has(code)) {
-    return new DownloadError('connect-failed', `Network error: ${message}`, true, {}, { cause: error });
+    return new DownloadError(
+      'connect-failed',
+      `Network error: ${message}`,
+      true,
+      {},
+      { cause: error },
+    );
   }
-  return new DownloadError('connect-failed', `Request failed: ${message}`, true, {}, { cause: error });
+  return new DownloadError(
+    'connect-failed',
+    `Request failed: ${message}`,
+    true,
+    {},
+    { cause: error },
+  );
 }
 
 /**
@@ -207,6 +239,11 @@ export class SafeFetcher {
     const hops: DownloadHop[] = [];
     let bytesReceived = 0;
     let httpStatus: number | null = null;
+    // Set from socket callbacks, so held in an object (narrowing would assume it is never set).
+    const timedOut: { error: DownloadError | null } = { error: null };
+    const onTimeout = (error: DownloadError) => {
+      timedOut.error = error;
+    };
     try {
       let current = checkUrl(url, policy, hops, false);
       for (let redirects = 0; ; redirects += 1) {
@@ -219,13 +256,17 @@ export class SafeFetcher {
         };
         hops.push(hop);
         const target = await this.resolve(current.hostname, hop, hops);
-        const response = await this.request(current, target, combined);
+        const response = await this.request(current, target, combined, onTimeout);
         httpStatus = response.statusCode ?? null;
         hop.status = httpStatus;
         hop.connectedAddress = response.socket.remoteAddress ?? target.address;
         if (hop.connectedAddress !== target.address) {
           response.destroy();
-          throw new DownloadError('address-blocked', 'The connection was not pinned to the checked address', false);
+          throw new DownloadError(
+            'address-blocked',
+            'The connection was not pinned to the checked address',
+            false,
+          );
         }
 
         if (httpStatus !== null && REDIRECT_STATUSES.has(httpStatus)) {
@@ -233,7 +274,11 @@ export class SafeFetcher {
           hop.location = location;
           response.resume();
           if (location === null) {
-            throw new DownloadError('invalid-redirect', 'A redirect without a Location header', false);
+            throw new DownloadError(
+              'invalid-redirect',
+              'A redirect without a Location header',
+              false,
+            );
           }
           if (redirects + 1 > this.options.maxRedirects) {
             throw new DownloadError(
@@ -246,7 +291,11 @@ export class SafeFetcher {
           try {
             next = new URL(location, current).href;
           } catch {
-            throw new DownloadError('invalid-redirect', 'The redirect target is not a valid URL', false);
+            throw new DownloadError(
+              'invalid-redirect',
+              'The redirect target is not a valid URL',
+              false,
+            );
           }
           current = checkUrl(next, policy, hops, true);
           continue;
@@ -277,7 +326,9 @@ export class SafeFetcher {
         }
         const lengthHeader = response.headers['content-length'];
         const declaredLength =
-          lengthHeader !== undefined && /^\d{1,15}$/.test(lengthHeader) ? Number(lengthHeader) : null;
+          lengthHeader !== undefined && /^\d{1,15}$/.test(lengthHeader)
+            ? Number(lengthHeader)
+            : null;
         if (declaredLength !== null && declaredLength > policy.maxBytes) {
           response.destroy();
           throw new DownloadError(
@@ -321,7 +372,7 @@ export class SafeFetcher {
         };
       }
     } catch (error) {
-      const mapped = classify(error, signal, deadline);
+      const mapped = timedOut.error ?? classify(error, signal, deadline);
       throw new DownloadError(
         mapped.code,
         mapped.message,
@@ -332,12 +383,22 @@ export class SafeFetcher {
     }
   }
 
-  private async resolve(hostname: string, hop: DownloadHop, hops: DownloadHop[]): Promise<ResolvedAddress> {
+  private async resolve(
+    hostname: string,
+    hop: DownloadHop,
+    hops: DownloadHop[],
+  ): Promise<ResolvedAddress> {
     let answers: readonly ResolvedAddress[];
     try {
       answers = await this.resolver(hostname);
     } catch (error) {
-      throw new DownloadError('dns-failure', `DNS resolution of ${hostname} failed`, true, { hops }, { cause: error });
+      throw new DownloadError(
+        'dns-failure',
+        `DNS resolution of ${hostname} failed`,
+        true,
+        { hops },
+        { cause: error },
+      );
     }
     hop.resolvedAddresses = answers.map((answer) => answer.address);
     if (answers.length === 0) {
@@ -356,11 +417,17 @@ export class SafeFetcher {
       }
     }
     const [first] = answers;
-    if (first === undefined) throw new DownloadError('dns-failure', `${hostname} has no addresses`, true, { hops });
+    if (first === undefined)
+      throw new DownloadError('dns-failure', `${hostname} has no addresses`, true, { hops });
     return first;
   }
 
-  private request(url: URL, target: ResolvedAddress, signal: AbortSignal): Promise<IncomingMessage> {
+  private request(
+    url: URL,
+    target: ResolvedAddress,
+    signal: AbortSignal,
+    onTimeout: (error: DownloadError) => void,
+  ): Promise<IncomingMessage> {
     const { options } = this;
     // The socket connects to the address checked above, whatever the system resolver would say.
     const pinned: LookupFunction = (_hostname, lookupOptions, callback) => {
@@ -394,11 +461,16 @@ export class SafeFetcher {
           resolve(response);
         },
       );
+      // A destroyed socket surfaces as a generic stream error; the callback keeps the reason.
+      const fail = (error: DownloadError) => {
+        onTimeout(error);
+        req.destroy(error);
+      };
       const connectTimer = setTimeout(() => {
-        req.destroy(new DownloadError('timeout', 'The source did not respond in time', true));
+        fail(new DownloadError('timeout', 'The source did not respond in time', true));
       }, options.connectTimeoutMs);
       req.setTimeout(options.idleTimeoutMs, () => {
-        req.destroy(new DownloadError('timeout', 'The source stopped sending data', true));
+        fail(new DownloadError('timeout', 'The source stopped sending data', true));
       });
       req.on('error', (error) => {
         clearTimeout(connectTimer);
@@ -411,9 +483,16 @@ export class SafeFetcher {
 
 function httpFailure(status: number | null): DownloadError {
   const label = status === null ? 'no status' : `HTTP ${String(status)}`;
-  if (status === 429) return new DownloadError('rate-limited', `The source answered ${label}`, true, { httpStatus: status });
+  if (status === 429)
+    return new DownloadError('rate-limited', `The source answered ${label}`, true, {
+      httpStatus: status,
+    });
   if (status === 408 || (status !== null && status >= 500)) {
-    return new DownloadError('http-error', `The source answered ${label}`, true, { httpStatus: status });
+    return new DownloadError('http-error', `The source answered ${label}`, true, {
+      httpStatus: status,
+    });
   }
-  return new DownloadError('http-error', `The source answered ${label}`, false, { httpStatus: status });
+  return new DownloadError('http-error', `The source answered ${label}`, false, {
+    httpStatus: status,
+  });
 }

@@ -70,7 +70,8 @@ export class ClamdScanner implements FileScanner {
         }
         chunks.push(chunk);
         // Replies to z-commands end with a NUL byte.
-        if (chunk.includes(0)) finish(null, Buffer.concat(chunks).toString('utf8').replace(/\0.*$/s, ''));
+        if (chunk.includes(0))
+          finish(null, Buffer.concat(chunks).toString('utf8').replace(/\0.*$/s, ''));
       });
       socket.on('error', (error) => {
         finish(error);
@@ -107,7 +108,9 @@ export class ClamdScanner implements FileScanner {
     return {
       engine: engine?.trim() ?? null,
       signatures:
-        signatures === undefined ? null : [signatures.trim(), date?.trim()].filter(Boolean).join(' '),
+        signatures === undefined
+          ? null
+          : [signatures.trim(), date?.trim()].filter(Boolean).join(' '),
     };
   }
 
@@ -133,7 +136,11 @@ export class ClamdScanner implements FileScanner {
           socket.write(Buffer.alloc(4));
         })
       ).trim();
-      return { ...parseInstreamReply(reply), engineVersion: version.engine, signatureVersion: version.signatures };
+      return {
+        ...parseInstreamReply(reply),
+        engineVersion: version.engine,
+        signatureVersion: version.signatures,
+      };
     } catch (error) {
       return {
         verdict: 'error',
@@ -154,7 +161,11 @@ export function parseInstreamReply(
   if (body === 'OK') return { verdict: 'clean', findings: [], error: null };
   const found = /^(.+) FOUND$/.exec(body);
   if (found?.[1] !== undefined) {
-    return { verdict: 'malicious', findings: [{ name: found[1].trim().slice(0, 255), detail: null }], error: null };
+    return {
+      verdict: 'malicious',
+      findings: [{ name: found[1].trim().slice(0, 255), detail: null }],
+      error: null,
+    };
   }
   return { verdict: 'error', findings: [], error: `clamd: ${body.slice(0, 500) || 'empty reply'}` };
 }

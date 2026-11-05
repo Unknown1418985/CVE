@@ -10,9 +10,18 @@ import {
 import type { Logger } from '@cve/logger';
 import type { DomainEvent, EventSubscription } from '@cve/messaging';
 
-import { exploitDbIdFromReference, exploitDbTarget, githubArchiveTarget, type SourcePolicy } from '../domain/sources.js';
+import {
+  exploitDbIdFromReference,
+  exploitDbTarget,
+  githubArchiveTarget,
+  type SourcePolicy,
+} from '../domain/sources.js';
 import type { DownloadJobQueue } from '../download/download-jobs.js';
-import { deleteReleasedCopies, refreshVerification, type LifecycleChange } from '../download/lifecycle.js';
+import {
+  deleteReleasedCopies,
+  refreshVerification,
+  type LifecycleChange,
+} from '../download/lifecycle.js';
 import { planRequest } from '../download/requests.js';
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { claimEvent, TX_OPTIONS } from '../persistence/database.js';
@@ -67,7 +76,9 @@ export class PocEventHandlers {
     const requestId = await this.options.prisma.$transaction(async (tx) => {
       if (!(await claimEvent(tx, POC_ARTIFACT_CONSUMER, event.eventId))) return null;
       const occurredAt = new Date(event.occurredAt);
-      const existing = await tx.pocArtifactState.findUnique({ where: { pocArtifactId: payload.artifactId } });
+      const existing = await tx.pocArtifactState.findUnique({
+        where: { pocArtifactId: payload.artifactId },
+      });
       if (existing === null) {
         await tx.pocArtifactState.create({
           data: {
@@ -85,7 +96,10 @@ export class PocEventHandlers {
       if (policy === undefined || !policy.enabled || !policy.automatic) return null;
       const target = githubArchiveTarget(policy, payload.repositoryFullName, payload.commitSha);
       if (target === null) {
-        this.options.logger.warn({ artifactId: payload.artifactId }, 'PoC artifact has no valid repository name or commit');
+        this.options.logger.warn(
+          { artifactId: payload.artifactId },
+          'PoC artifact has no valid repository name or commit',
+        );
         return null;
       }
       const expectedLimit = policy.maxBytes * this.options.maxExpectedRatio;
@@ -121,7 +135,9 @@ export class PocEventHandlers {
     const changes: LifecycleChange[] = [];
     await this.options.prisma.$transaction(async (tx) => {
       if (!(await claimEvent(tx, POC_VERIFICATION_CONSUMER, event.eventId))) return;
-      const existing = await tx.pocArtifactState.findUnique({ where: { pocArtifactId: payload.artifactId } });
+      const existing = await tx.pocArtifactState.findUnique({
+        where: { pocArtifactId: payload.artifactId },
+      });
       // Events can arrive out of order: an older decision never overwrites a newer one.
       if (existing !== null && existing.verificationVersion >= payload.version) return;
       const status = VERIFICATION_TO_DB[payload.toStatus];
@@ -166,7 +182,13 @@ export class PocEventHandlers {
   async referenceDiscovered(event: DomainEvent<ReferenceDiscoveredPayload>): Promise<void> {
     const payload = event.payload;
     const policy = this.policy('exploit-db');
-    if (payload.kind !== 'exploit-db' || policy === undefined || !policy.enabled || !policy.automatic) return;
+    if (
+      payload.kind !== 'exploit-db' ||
+      policy === undefined ||
+      !policy.enabled ||
+      !policy.automatic
+    )
+      return;
     const exploitId = exploitDbIdFromReference(policy, payload.url);
     const target = exploitId === null ? null : exploitDbTarget(policy, exploitId);
     const requestId = await this.options.prisma.$transaction(async (tx) => {

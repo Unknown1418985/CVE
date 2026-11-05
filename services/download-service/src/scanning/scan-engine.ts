@@ -19,8 +19,8 @@ import { aggregateScanStatus } from '../domain/artifact-rules.js';
 import {
   deleteReleasedCopies,
   linkedPocArtifacts,
+  applyStatusChange,
   lockArtifact,
-  revokeIfNeeded,
 } from '../download/lifecycle.js';
 import { downloadEvent, systemContext } from '../events/download-events.js';
 import type { PrismaClient } from '../generated/prisma/client.js';
@@ -89,10 +89,15 @@ export class ScanEngine {
     const artifact = await prisma.storedArtifact.findUnique({ where: { id: artifactId } });
     if (artifact === null) return { status: 'skipped', reason: 'the artifact does not exist' };
     const previous = SCAN_STATUS_TO_API[artifact.scanStatus];
-    await prisma.storedArtifact.update({
-      where: { id: artifactId },
-      data: { scanStatus: 'scanning' },
-    });
+    // A released artifact keeps its clean status while it is rescanned (the release requires it);
+    // the result below either confirms it or revokes the release in the same update.
+    const markScanning = artifact.lifecycleStatus !== 'released';
+    if (markScanning) {
+      await prisma.storedArtifact.update({
+        where: { id: artifactId },
+        data: { scanStatus: 'scanning' },
+      });
+    }
     const log = logger.child({ artifactId, reason });
     const scanRunId = randomUUID();
     await mkdir(this.options.stagingDir, { recursive: true, mode: 0o700 });
@@ -120,10 +125,12 @@ export class ScanEngine {
       }
     } catch (error) {
       // Storage or abort failure: restore the previous status; the job (or maintenance) retries.
-      await prisma.storedArtifact.update({
-        where: { id: artifactId },
-        data: { scanStatus: SCAN_STATUS_TO_DB[previous] },
-      });
+      if (markScanning) {
+        await prisma.storedArtifact.update({
+          where: { id: artifactId },
+          data: { scanStatus: SCAN_STATUS_TO_DB[previous] },
+        });
+      }
       throw error;
     } finally {
       await rm(staging, { force: true });
@@ -149,17 +156,15 @@ export class ScanEngine {
           })),
         });
       }
-      const updated = await tx.storedArtifact.update({
-        where: { id: artifactId },
-        data: {
-          scanStatus: SCAN_STATUS_TO_DB[finalStatus],
-          lastScannedAt: new Date(),
-          scanQueuedAt: null,
-          version: { increment: 1 },
-        },
-      });
-      const context = systemContext(undefined);
-      const revoked = await revokeIfNeeded(tx, updated, `the scan status is ${finalStatus}`, context);
+      const revoked = await applyStatusChange(
+        tx,
+        locked,
+        { scanStatus: SCAN_STATUS_TO_DB[finalStatus] },
+        { lastScannedAt: new Date(), scanQueuedAt: null },
+        `the scan status is ${finalStatus}`,
+        systemContext(undefined),
+      );
+      const updated = revoked.artifact;
       await writeOutbox(tx, [
         downloadEvent(
           DOWNLOAD_EVENT_TYPES.artifactScanned,
