@@ -54,6 +54,10 @@ jobs:
           mkdir -p .certs
           docker compose exec -T opensearch cat config/certs/ca.pem > .certs/platform-ca.pem
 
+      # The Download Service suite runs the real YARA command-line scanner (clamd runs in Compose).
+      - name: Install YARA
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends yara
+
       - name: Integration tests (messaging, jobs, data store isolation, Keycloak)
         run: pnpm test:integration
 
