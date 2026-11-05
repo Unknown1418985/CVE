@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
 import { validateCveId } from '@cve/contracts';
+import type { SourceHttpClient } from '@cve/source-http';
 
-import type { SourceHttpClient } from '../../http/source-http-client.js';
 import {
   parseCpe23,
   sanitizeCveContent,

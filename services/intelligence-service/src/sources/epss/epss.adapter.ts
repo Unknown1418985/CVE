@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
 import { validateCveId, type EpssScore } from '@cve/contracts';
+import type { SourceHttpClient } from '@cve/source-http';
 
-import type { SourceHttpClient } from '../../http/source-http-client.js';
 import type {
   AdapterDescription,
   AdapterRunContext,

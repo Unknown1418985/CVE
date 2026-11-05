@@ -1,9 +1,8 @@
 import { z } from 'zod';
 
 import { validateCveId } from '@cve/contracts';
+import { SourceHttpError, type SourceHttpClient } from '@cve/source-http';
 
-import { SourceHttpError } from '../../http/errors.js';
-import type { SourceHttpClient } from '../../http/source-http-client.js';
 import {
   sanitizeCveContent,
   sourceIdentifier,

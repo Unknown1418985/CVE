@@ -466,6 +466,25 @@ importers:
         specifier: ^5.1.0
         version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@24.19.2)(vite@8.3.5(@types/node@24.19.2)(jiti@2.7.0)(yaml@2.9.1))
 
+  packages/source-http:
+    dependencies:
+      '@cve/logger':
+        specifier: workspace:*
+        version: link:../logger
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.19.2
+      typescript:
+        specifier: ~6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^5.1.0
+        version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@24.19.2)(vite@8.3.5(@types/node@24.19.2)(jiti@2.7.0)(yaml@2.9.1))
+
   packages/testing:
     dependencies:
       '@swc/core':
@@ -939,6 +958,9 @@ importers:
       '@cve/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@cve/source-http':
+        specifier: workspace:*
+        version: link:../../packages/source-http
       '@nestjs/common':
         specifier: ^12.3.2
         version: 12.3.2(reflect-metadata@0.2.2)(rxjs@7.8.2)
