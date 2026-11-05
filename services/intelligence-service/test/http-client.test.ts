@@ -2,20 +2,19 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import {
+  backoffDelayMs,
+  DEFAULT_RETRY_POLICY,
   DisallowedUrlError,
+  loggableUrl,
+  parseRetryAfter,
+  SlidingWindowRateLimiter,
+  SourceHttpClient,
   SourceHttpError,
   SourceResponseError,
   SourceTimeoutError,
-} from '../src/http/errors.js';
-import { SlidingWindowRateLimiter } from '../src/http/rate-limiter.js';
-import {
-  backoffDelayMs,
-  DEFAULT_RETRY_POLICY,
-  loggableUrl,
-  parseRetryAfter,
-  SourceHttpClient,
   type RequestMeter,
-} from '../src/http/source-http-client.js';
+} from '@cve/source-http';
+
 import { MockSource } from './mock-source.js';
 import { silentLogger } from './support.js';
 

@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
 import { kevStatusInputSchema, normalizeCweId, validateCveId } from '@cve/contracts';
+import type { SourceHttpClient } from '@cve/source-http';
 
-import type { SourceHttpClient } from '../../http/source-http-client.js';
 import { cleanText, sourceTimestamp } from '../cve-content.js';
 import type {
   AdapterDescription,

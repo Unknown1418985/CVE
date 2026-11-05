@@ -1,12 +1,17 @@
 import { INTELLIGENCE_SOURCES, type IntelligenceSource } from '@cve/contracts';
 import type { Logger } from '@cve/logger';
+import {
+  DEFAULT_RETRY_POLICY,
+  githubQuotaReset,
+  SlidingWindowRateLimiter,
+  SourceHttpClient,
+  type RateLimit,
+} from '@cve/source-http';
 
 import type { Env } from '../config/env.js';
-import { SlidingWindowRateLimiter, type RateLimit } from '../http/rate-limiter.js';
-import { DEFAULT_RETRY_POLICY, SourceHttpClient } from '../http/source-http-client.js';
 import { CisaKevAdapter } from './cisa-kev/cisa-kev.adapter.js';
 import { EpssAdapter } from './epss/epss.adapter.js';
-import { GithubAdvisoryAdapter, githubQuotaReset } from './github/github-advisory.adapter.js';
+import { GithubAdvisoryAdapter } from './github/github-advisory.adapter.js';
 import { MitreCveAdapter } from './mitre/mitre.adapter.js';
 import { NvdAdapter } from './nvd/nvd.adapter.js';
 import type { SourceAdapter } from './source-adapter.js';

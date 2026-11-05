@@ -14,10 +14,9 @@ import {
 } from '@cve/contracts';
 import type { Logger } from '@cve/logger';
 import { createDomainEvent } from '@cve/messaging';
+import { isRetryable, type RequestMeter } from '@cve/source-http';
 import type { z } from 'zod';
 
-import { isRetryable } from '../http/errors.js';
-import type { RequestMeter } from '../http/source-http-client.js';
 import {
   LeaseLostError,
   type IntelligenceRepository,

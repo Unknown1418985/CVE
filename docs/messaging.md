@@ -164,5 +164,10 @@ await worker.start();
   `processed_events` inbox table written in the handler's transaction, and publishes
   `asset.vendor.*`, `asset.product.*` and `asset.cve-association.*` through its outbox (see
   [asset-service.md](asset-service.md)).
+- **PoC Service** (Phase 5): consumes `cve.record.*` (consumer `cve-record-tracker`) and
+  `intelligence.cve-observation.recorded` (consumer `cve-observation-references`), publishes
+  `poc.repository.*`, `poc.cve-association.*`, `poc.artifact.*`, `poc.reference.discovered`
+  and `poc.discovery-run.*` through its outbox, and runs the BullMQ queues `poc-discovery`,
+  `poc-inspection`, `poc-scheduling` and `poc-maintenance` (see [poc-service.md](poc-service.md)).
 - The other services do not open RabbitMQ or Redis connections yet; their first producers,
   consumers and jobs arrive with their features.

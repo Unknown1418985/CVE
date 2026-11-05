@@ -352,6 +352,48 @@ describe('Asset Service routes', () => {
   });
 });
 
+describe('PoC Service routes', () => {
+  it('requires poc:read to read and poc:manage to write', async () => {
+    const app = await start(backend(ok));
+    const viewer = await issuer.tokenFor(randomUUID(), ['viewer']);
+    const analyst = await issuer.tokenFor(randomUUID(), ['security-analyst']);
+    const researcher = await issuer.tokenFor(randomUUID(), ['vulnerability-researcher']);
+    const id = '00000000-0000-4000-8000-000000000001';
+
+    await app.http.get('/api/v1/poc-repositories').expect(401);
+    await app.http
+      .get('/api/v1/poc-repositories?cveId=CVE-2026-900001')
+      .set(bearer(viewer))
+      .expect(200);
+    await app.http.get(`/api/v1/poc-artifacts/${id}`).set(bearer(analyst)).expect(200);
+    await app.http.get('/api/v1/poc-connectors').set(bearer(viewer)).expect(200);
+    await app.http.post('/api/v1/poc-associations').set(bearer(viewer)).send({}).expect(403);
+    await app.http
+      .patch(`/api/v1/poc-associations/${id}`)
+      .set(bearer(analyst))
+      .send({})
+      .expect(403);
+    await app.http
+      .post(`/api/v1/poc-artifacts/${id}/verification`)
+      .set(bearer(viewer))
+      .send({})
+      .expect(403);
+    await app.http.post('/api/v1/poc-discovery-runs').set(bearer(analyst)).send({}).expect(403);
+    await app.http
+      .post('/api/v1/poc-discovery-runs')
+      .set(bearer(researcher))
+      .send({ mode: 'recent', connector: 'github' })
+      .expect(200);
+
+    expect(forwarded.map((request) => `${request.method} ${request.url}`)).toEqual([
+      'GET http://poc-service.internal:4000/api/v1/poc-repositories?cveId=CVE-2026-900001',
+      `GET http://poc-service.internal:4000/api/v1/poc-artifacts/${id}`,
+      'GET http://poc-service.internal:4000/api/v1/poc-connectors',
+      'POST http://poc-service.internal:4000/api/v1/poc-discovery-runs',
+    ]);
+  });
+});
+
 describe('CVE Service routes', () => {
   it('requires cve:read to read and cve:manage to write', async () => {
     const app = await start(backend(ok));

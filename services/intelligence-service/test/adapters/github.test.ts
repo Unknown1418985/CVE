@@ -2,7 +2,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { cveObservationRecordedPayloadSchema, INTELLIGENCE_EVENT_TYPES } from '@cve/contracts';
 
-import { nextLink, parseVersionRange } from '../../src/sources/github/github-advisory.adapter.js';
+import { nextLink } from '@cve/source-http';
+
+import { parseVersionRange } from '../../src/sources/github/github-advisory.adapter.js';
 import { advisory, syntheticCveId, syntheticGhsaId } from '../fixtures/index.js';
 import { InMemoryIntelligenceRepository } from '../in-memory-repository.js';
 import { MockSource } from '../mock-source.js';

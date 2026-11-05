@@ -2,8 +2,8 @@ import type { z } from 'zod';
 
 import type { EpssScore, IntelligenceSource } from '@cve/contracts';
 import type { Logger } from '@cve/logger';
+import type { RequestMeter } from '@cve/source-http';
 
-import type { RequestMeter } from '../http/source-http-client.js';
 import type { CveContentInput } from './cve-content.js';
 
 /** JSON-serialisable value stored as cursor or checkpoint. */

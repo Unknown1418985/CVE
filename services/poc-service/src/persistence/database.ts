@@ -1,0 +1,55 @@
+import type { DomainEventEnvelope } from '@cve/contracts';
+
+import { Prisma } from '../generated/prisma/client.js';
+
+export { Prisma } from '../generated/prisma/client.js';
+
+/** Nest injection token of the service's PrismaClient. */
+export const PRISMA = Symbol('PRISMA');
+
+export type Tx = Prisma.TransactionClient;
+
+/** Interactive transaction limits (an inspection writes up to a few thousand file rows). */
+export const TX_OPTIONS = { maxWait: 10_000, timeout: 60_000 } as const;
+
+export function isUniqueViolation(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+}
+
+/** Escapes LIKE wildcards (PostgreSQL's default escape character is the backslash). */
+export function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (char) => `\\${char}`);
+}
+
+export function outboxRows(
+  events: readonly DomainEventEnvelope[],
+): Prisma.OutboxEventCreateManyInput[] {
+  return events.map((event) => ({
+    eventId: event.eventId,
+    eventType: event.eventType,
+    envelope: JSON.parse(JSON.stringify(event)) as Prisma.InputJsonValue,
+  }));
+}
+
+export async function writeOutbox(tx: Tx, events: readonly DomainEventEnvelope[]): Promise<void> {
+  if (events.length > 0) await tx.outboxEvent.createMany({ data: outboxRows(events) });
+}
+
+export function decimalToNumber(value: Prisma.Decimal | null): number | null {
+  return value === null ? null : value.toNumber();
+}
+
+export const toJson = (value: unknown): Prisma.InputJsonValue =>
+  JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+
+/**
+ * Claims an event for a consumer inside the caller's transaction (inbox). Returns false when the
+ * event was already applied, so redeliveries are no-ops.
+ */
+export async function claimEvent(tx: Tx, consumer: string, eventId: string): Promise<boolean> {
+  const inserted = await tx.$executeRaw`
+    INSERT INTO "processed_events" ("id", "consumer", "event_id", "processed_at")
+    VALUES (gen_random_uuid(), ${consumer}, ${eventId}::uuid, now())
+    ON CONFLICT ("consumer", "event_id") DO NOTHING`;
+  return inserted === 1;
+}

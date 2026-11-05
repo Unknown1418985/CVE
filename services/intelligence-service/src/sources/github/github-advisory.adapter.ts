@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
 import { validateCveId } from '@cve/contracts';
+import { nextLink, type SourceHttpClient } from '@cve/source-http';
 
-import type { SourceHttpClient } from '../../http/source-http-client.js';
 import { sanitizeCveContent, sourceTimestamp, type CveContentDraft } from '../cve-content.js';
 import type {
   AdapterDescription,
@@ -79,23 +79,6 @@ export interface GithubAdvisoryAdapterOptions {
   readonly pageSize: number;
   /** First run without a cursor synchronises advisories updated after this time. */
   readonly initialLookbackMs: number;
-}
-
-/** `x-ratelimit-remaining: 0` → pause until `x-ratelimit-reset` (epoch seconds). */
-export function githubQuotaReset(headers: Headers): number | undefined {
-  if (headers.get('x-ratelimit-remaining') !== '0') return undefined;
-  const reset = Number(headers.get('x-ratelimit-reset'));
-  return Number.isFinite(reset) && reset > 0 ? reset * 1_000 : undefined;
-}
-
-/** Extracts the `rel="next"` target from a `Link` header. */
-export function nextLink(header: string | null): string | null {
-  if (header === null) return null;
-  for (const part of header.split(',')) {
-    const match = /<([^>]+)>\s*;\s*rel="?next"?/.exec(part.trim());
-    if (match?.[1] !== undefined) return match[1];
-  }
-  return null;
 }
 
 interface Bounds {

@@ -13,6 +13,7 @@ import { AssetProxyController } from './proxy/asset-proxy.controller.js';
 import { CveProxyController } from './proxy/cve-proxy.controller.js';
 import { IdentityProxyController } from './proxy/identity-proxy.controller.js';
 import { IntelligenceProxyController } from './proxy/intelligence-proxy.controller.js';
+import { PocProxyController } from './proxy/poc-proxy.controller.js';
 import { PROXY_OPTIONS } from './proxy/proxy.constants.js';
 import { ProxyService, type ProxyOptions } from './proxy/proxy.service.js';
 import { SERVICE_NAME, SERVICE_VERSION } from './service.js';
@@ -84,6 +85,7 @@ export class AppModule {
         CveProxyController,
         IntelligenceProxyController,
         AssetProxyController,
+        PocProxyController,
       ],
       providers: [
         { provide: PROXY_OPTIONS, useValue: proxyOptions },

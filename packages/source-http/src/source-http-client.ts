@@ -1,6 +1,5 @@
 import type { z } from 'zod';
 
-import type { IntelligenceSource } from '@cve/contracts';
 import type { Logger } from '@cve/logger';
 
 import { abortReason, sleep } from './abortable.js';
@@ -37,7 +36,8 @@ const DEFAULT_RETRYABLE_STATUSES = [408, 425, 429, 500, 502, 503, 504];
 const MAX_REDIRECTS = 3;
 
 export interface SourceHttpClientOptions {
-  readonly source: IntelligenceSource;
+  /** Source name used in logs, e.g. `nvd` or `github`. */
+  readonly source: string;
   /**
    * Origins (`https://host[:port]`) requests may go to. Pagination links, redirects and
    * configured URLs outside this list are refused (SSRF protection).
