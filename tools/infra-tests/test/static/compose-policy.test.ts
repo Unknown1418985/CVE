@@ -61,6 +61,8 @@ const EGRESS_ALLOWED = new Set([
   'download-service',
   'exploit-service',
   'notification-service',
+  // freshclam downloads ClamAV signature updates.
+  'clamav',
 ]);
 
 describe('compose.yaml security policy', () => {

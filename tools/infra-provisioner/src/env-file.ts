@@ -43,7 +43,15 @@ export const DEV_HOST_PORTS = {
   minio: 9000,
   opensearch: 9200,
   keycloak: 8180,
+  clamav: 3310,
 } as const;
+
+/** Services whose only extra local setting is the Keycloak address (validated tokens). */
+const KEYCLOAK_ONLY_SERVICES: readonly BackendServiceName[] = [
+  'asset-service',
+  'poc-service',
+  'download-service',
+];
 
 const OBJECT_STORAGE_SERVICES: readonly BackendServiceName[] = [
   'download-service',
@@ -85,6 +93,20 @@ export function renderDevEnvFiles(values: Map<string, string>): Record<string, s
         `S3_ENDPOINT=http://localhost:${DEV_HOST_PORTS.minio}`,
         `S3_ACCESS_KEY_ID=${service}`,
         `S3_SECRET_ACCESS_KEY=${required(values, `${prefix}_MINIO_SECRET_KEY`)}`,
+      );
+    }
+    if (KEYCLOAK_ONLY_SERVICES.includes(service)) {
+      lines.push(
+        `KEYCLOAK_URL=http://localhost:${DEV_HOST_PORTS.keycloak}/auth`,
+        `KEYCLOAK_PUBLIC_URL=http://localhost:${DEV_HOST_PORTS.keycloak}/auth`,
+      );
+    }
+    if (service === 'download-service') {
+      lines.push(
+        `CLAMAV_HOST=localhost`,
+        `CLAMAV_PORT=${DEV_HOST_PORTS.clamav}`,
+        // Relative to services/download-service, where `pnpm dev` runs; needs a local `yara`.
+        'YARA_RULES_PATH=yara/index.yar',
       );
     }
     if (service === 'cve-service') {

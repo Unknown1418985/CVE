@@ -4,7 +4,7 @@ The PoC Service (Phase 5) discovers public proof-of-concept (PoC) repositories, 
 metadata and links them to CVEs with a confidence score. It stores **metadata only**: repository
 facts, the head commit, and the file listing (paths, modes, blob IDs and sizes). It never fetches
 file contents, archives or clones, and nothing it receives is executed, extracted or rendered as
-HTML. Downloading artifacts into MinIO is the Download Service's job (Phase 6).
+HTML. Downloading artifacts into MinIO is the [Download Service](download-service.md)'s job.
 
 Package `@cve/poc-service`, port `4005`, database `poc_service` (role `poc_service`).
 
@@ -238,7 +238,9 @@ against a database that holds anything else.
   follows the documented REST API.
 - Exploit-DB has no connector of its own (its URLs are collected as references), and gists are
   recorded as references but not inspected.
-- Downloading, SHA-256 of downloaded content, malware scanning and quarantine storage are Phase 6
-  (Download Service); the verification state here is the analysts' judgement of the metadata.
+- Downloading, SHA-256 of downloaded content, malware scanning and quarantine storage belong to the
+  [Download Service](download-service.md), which consumes this service's artifact and verification
+  events. This service does not consume the `download.*` events yet, so it does not show download
+  or scan status. The verification state here remains the analysts' judgement.
 - The consumers were tested against PostgreSQL with synthetic events, not against a live RabbitMQ
   broker; topology and delivery are covered by the `@cve/messaging` tests.

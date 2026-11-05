@@ -11,3 +11,4 @@ export * from './cve/index.js';
 export * from './intelligence/index.js';
 export * from './asset/index.js';
 export * from './poc/index.js';
+export * from './download/index.js';

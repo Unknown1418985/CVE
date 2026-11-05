@@ -8,8 +8,9 @@
 #   cve-reports          generated reports
 #
 # Users (access key = service name)
-#   download-service     write/read quarantine only
-#   poc-service          read/delete quarantine, read/write released artifacts
+#   download-service     owns artifact storage: quarantine and released artifacts
+#                        (the only writer of either bucket)
+#   poc-service          read released artifacts only (it stores metadata, never files)
 #   reporting-service    read/write reports only
 set -eu
 
@@ -51,12 +52,23 @@ cat > "$policy_dir/download-service.json" <<'JSON'
     {
       "Effect": "Allow",
       "Action": ["s3:GetBucketLocation", "s3:ListBucket"],
-      "Resource": ["arn:aws:s3:::cve-poc-quarantine"]
+      "Resource": ["arn:aws:s3:::cve-poc-quarantine", "arn:aws:s3:::cve-poc-artifacts"]
     },
     {
       "Effect": "Allow",
-      "Action": ["s3:PutObject", "s3:GetObject", "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts"],
+      "Action": [
+        "s3:PutObject",
+        "s3:GetObject",
+        "s3:DeleteObject",
+        "s3:AbortMultipartUpload",
+        "s3:ListMultipartUploadParts"
+      ],
       "Resource": ["arn:aws:s3:::cve-poc-quarantine/*"]
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject", "s3:AbortMultipartUpload"],
+      "Resource": ["arn:aws:s3:::cve-poc-artifacts/*"]
     }
   ]
 }
@@ -68,17 +80,12 @@ cat > "$policy_dir/poc-service.json" <<'JSON'
   "Statement": [
     {
       "Effect": "Allow",
-      "Action": ["s3:GetBucketLocation", "s3:ListBucket"],
-      "Resource": ["arn:aws:s3:::cve-poc-quarantine", "arn:aws:s3:::cve-poc-artifacts"]
+      "Action": ["s3:GetBucketLocation"],
+      "Resource": ["arn:aws:s3:::cve-poc-artifacts"]
     },
     {
       "Effect": "Allow",
-      "Action": ["s3:GetObject", "s3:GetObjectVersion", "s3:DeleteObject"],
-      "Resource": ["arn:aws:s3:::cve-poc-quarantine/*"]
-    },
-    {
-      "Effect": "Allow",
-      "Action": ["s3:PutObject", "s3:GetObject", "s3:GetObjectVersion", "s3:AbortMultipartUpload"],
+      "Action": ["s3:GetObject"],
       "Resource": ["arn:aws:s3:::cve-poc-artifacts/*"]
     }
   ]

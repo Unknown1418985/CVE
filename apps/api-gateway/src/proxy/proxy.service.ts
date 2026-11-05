@@ -6,6 +6,10 @@ import {
   Injectable,
   UnsupportedMediaTypeException,
 } from '@nestjs/common';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import type { ReadableStream as WebReadableStream } from 'node:stream/web';
+
 import type { Request, Response } from 'express';
 
 import { getRequestPrincipal } from '@cve/auth';
@@ -48,6 +52,16 @@ const RELAYED_RESPONSE_HEADERS = [
   'etag',
   'idempotent-replayed',
 ] as const;
+/** Headers of a streamed download (artifact content), relayed as the backend set them. */
+const RELAYED_STREAM_HEADERS = [
+  ...RELAYED_RESPONSE_HEADERS,
+  'content-length',
+  'content-disposition',
+  'x-content-type-options',
+  'content-security-policy',
+  'repr-digest',
+  'x-artifact-sha256',
+] as const;
 const METHODS_WITH_BODY = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 // Dot segments and encoded separators could make the backend resolve a different route than
 // the one the gateway authorised, so such paths are refused outright.
@@ -62,6 +76,84 @@ export class ProxyService {
   constructor(@Inject(PROXY_OPTIONS) private readonly options: ProxyOptions) {}
 
   async forward(service: BackendServiceName, req: Request, res: Response): Promise<void> {
+    const upstream = await this.send(service, req);
+    const declared = Number(upstream.headers.get('content-length') ?? '0');
+    const limit = this.options.maxResponseBytes ?? 10 * 1024 * 1024;
+    if (declared > limit) {
+      await upstream.body?.cancel();
+      throw new BadGatewayException(`${service} response is too large`);
+    }
+    const payload = Buffer.from(await upstream.arrayBuffer());
+    if (payload.length > limit) throw new BadGatewayException(`${service} response is too large`);
+
+    this.afterResponse(req, upstream.status);
+    res.status(upstream.status);
+    for (const name of RELAYED_RESPONSE_HEADERS) {
+      const value = upstream.headers.get(name);
+      if (value !== null) res.setHeader(name, value);
+    }
+    if (payload.length === 0) {
+      res.end();
+    } else {
+      res.end(payload);
+    }
+  }
+
+  /**
+   * Relays a large backend response (artifact content) as a stream, without buffering it or
+   * applying the JSON size limit. The backend sets the download headers (attachment disposition,
+   * `nosniff`, sandbox CSP, digests), which are relayed unchanged; no other header passes.
+   */
+  async stream(service: BackendServiceName, req: Request, res: Response): Promise<void> {
+    // The timeout covers the response headers; the body then flows as fast as the client reads
+    // it and stops when the client disconnects.
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      controller.abort(new DOMException('The backend did not respond in time', 'TimeoutError'));
+    }, this.options.timeoutMs);
+    const onClose = () => {
+      controller.abort();
+    };
+    res.once('close', onClose);
+    let upstream: globalThis.Response;
+    try {
+      upstream = await this.send(service, req, controller.signal);
+    } finally {
+      clearTimeout(timer);
+    }
+    res.status(upstream.status);
+    for (const name of RELAYED_STREAM_HEADERS) {
+      const value = upstream.headers.get(name);
+      if (value !== null) res.setHeader(name, value);
+    }
+    if (upstream.body === null) {
+      res.end();
+      return;
+    }
+    const body = Readable.fromWeb(upstream.body as WebReadableStream<Uint8Array>);
+    try {
+      await pipeline(body, res);
+    } catch (error) {
+      // Headers are already sent: the client sees a truncated (and digest-mismatching) body.
+      this.options.logger.warn(
+        { err: error, service, correlationId: getCorrelationId(req) },
+        'streamed backend response was interrupted',
+      );
+      res.destroy();
+    } finally {
+      res.off('close', onClose);
+    }
+  }
+
+  /**
+   * Sends the request to the backend. `signal` replaces the default timeout, which also covers
+   * reading the body (a streamed download sets its own, covering the response headers only).
+   */
+  private async send(
+    service: BackendServiceName,
+    req: Request,
+    signal: AbortSignal = AbortSignal.timeout(this.options.timeoutMs),
+  ): Promise<globalThis.Response> {
     const path = req.originalUrl;
     if (UNSAFE_PATH.test(path.split('?')[0] ?? '')) {
       throw new BadRequestException('Invalid request path');
@@ -92,14 +184,13 @@ export class ProxyService {
       }
     }
 
-    let upstream: globalThis.Response;
     try {
-      upstream = await this.options.fetch(target, {
+      return await this.options.fetch(target, {
         method: req.method,
         headers,
         ...(body === undefined ? {} : { body }),
         redirect: 'manual',
-        signal: AbortSignal.timeout(this.options.timeoutMs),
+        signal,
       });
     } catch (error) {
       const timedOut = error instanceof Error && error.name === 'TimeoutError';
@@ -110,27 +201,6 @@ export class ProxyService {
       throw timedOut
         ? new GatewayTimeoutException(`${service} did not respond in time`)
         : new BadGatewayException(`${service} is unavailable`);
-    }
-
-    const declared = Number(upstream.headers.get('content-length') ?? '0');
-    const limit = this.options.maxResponseBytes ?? 10 * 1024 * 1024;
-    if (declared > limit) {
-      await upstream.body?.cancel();
-      throw new BadGatewayException(`${service} response is too large`);
-    }
-    const payload = Buffer.from(await upstream.arrayBuffer());
-    if (payload.length > limit) throw new BadGatewayException(`${service} response is too large`);
-
-    this.afterResponse(req, upstream.status);
-    res.status(upstream.status);
-    for (const name of RELAYED_RESPONSE_HEADERS) {
-      const value = upstream.headers.get(name);
-      if (value !== null) res.setHeader(name, value);
-    }
-    if (payload.length === 0) {
-      res.end();
-    } else {
-      res.end(payload);
     }
   }
 

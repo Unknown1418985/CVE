@@ -31,6 +31,9 @@ services:
     ports: ['127.0.0.1:8180:8180']
     environment:
       KC_HOSTNAME: http://localhost:8180/auth
+  clamav:
+    networks: [scanning, egress, dev-host]
+    ports: ['127.0.0.1:3310:3310']
   prometheus:
     networks: [observability, dev-host]
     ports: ['127.0.0.1:9090:9090']
