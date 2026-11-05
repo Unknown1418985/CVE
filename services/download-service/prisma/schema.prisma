@@ -1,0 +1,308 @@
+// Download Service schema. Owned exclusively by download-service (database `download_service`).
+// PoC artifacts are referenced by their stable IDs from the PoC Service's events; their
+// verification state is a local projection, never read from the PoC Service database.
+//
+// Downloaded content is untrusted. It lives only in object storage under generated keys; this
+// database holds metadata, provenance, scan results and the lifecycle.
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum DownloadRequestStatus {
+  pending
+  downloading
+  stored
+  duplicate
+  failed
+  rejected
+  cancelled
+
+  @@map("download_request_status")
+}
+
+enum DownloadAttemptOutcome {
+  succeeded
+  failed
+  rejected
+
+  @@map("download_attempt_outcome")
+}
+
+enum ArtifactLifecycleStatus {
+  quarantined
+  released
+  rejected
+
+  @@map("artifact_lifecycle_status")
+}
+
+enum ArtifactScanStatus {
+  pending
+  scanning
+  clean
+  suspicious
+  malicious
+  incomplete
+  integrity_failure @map("integrity-failure")
+
+  @@map("artifact_scan_status")
+}
+
+enum ScanVerdict {
+  clean
+  suspicious
+  malicious
+  error
+  not_configured @map("not-configured")
+
+  @@map("scan_verdict")
+}
+
+enum VerificationStatus {
+  unverified
+  in_review  @map("in-review")
+  verified
+  rejected
+  malicious
+
+  @@map("verification_status")
+}
+
+/// One download to perform: a canonical URL of an approved source (unique per source).
+model DownloadRequest {
+  id               String                @id @default(uuid()) @db.Uuid
+  source           String                @db.VarChar(32)
+  /// Canonical URL built by the source (never the raw user input).
+  sourceUrl        String                @map("source_url") @db.VarChar(2048)
+  /// SHA-256 of the canonical URL (unique key; URLs are too long for a B-tree index).
+  urlHash          String                @map("url_hash") @db.Char(64)
+  trigger          String                @db.VarChar(16)
+  status           DownloadRequestStatus @default(pending)
+  pocArtifactId    String?               @map("poc_artifact_id") @db.Uuid
+  pocRepositoryId  String?               @map("poc_repository_id") @db.Uuid
+  /// `owner/name` of the source repository, when there is one.
+  sourceRepository String?               @map("source_repository") @db.VarChar(200)
+  commitSha        String?               @map("commit_sha") @db.Char(40)
+  cveIds           String[]              @map("cve_ids")
+  priority         Int                   @default(5)
+  /// Download scheduling: the request is not started before this time.
+  scheduledFor     DateTime              @default(now()) @map("scheduled_for") @db.Timestamptz(3)
+  attempts         Int                   @default(0)
+  maxAttempts      Int                   @map("max_attempts")
+  /// When the request was handed to BullMQ, and the job ID (recovery checks that job).
+  queuedAt         DateTime?             @map("queued_at") @db.Timestamptz(3)
+  jobId            String?               @map("job_id") @db.VarChar(128)
+  /// Lease of the worker that runs the request (recovered by maintenance when it expires).
+  leaseUntil       DateTime?             @map("lease_until") @db.Timestamptz(3)
+  errorCode        String?               @map("error_code") @db.VarChar(64)
+  error            String?               @db.VarChar(2000)
+  artifactId       String?               @map("artifact_id") @db.Uuid
+  artifact         StoredArtifact?       @relation(fields: [artifactId], references: [id], onDelete: SetNull)
+  requestedBy      String?               @map("requested_by") @db.VarChar(255)
+  reason           String?               @db.VarChar(2000)
+  correlationId    String?               @map("correlation_id") @db.VarChar(128)
+  discoveredAt     DateTime              @default(now()) @map("discovered_at") @db.Timestamptz(3)
+  createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+  finishedAt       DateTime?             @map("finished_at") @db.Timestamptz(3)
+  version          Int                   @default(1)
+
+  attemptHistory DownloadAttempt[]
+  provenance     ArtifactSource[]
+
+  @@unique([source, urlHash])
+  @@index([status, scheduledFor])
+  @@index([pocArtifactId])
+  @@index([artifactId])
+  @@index([createdAt])
+  @@map("download_requests")
+}
+
+/// Download history: one row per attempt, with the full hop chain (provenance).
+model DownloadAttempt {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  requestId           String                  @map("request_id") @db.Uuid
+  request             DownloadRequest         @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  attempt             Int
+  jobId               String?                 @map("job_id") @db.VarChar(128)
+  outcome             DownloadAttemptOutcome?
+  errorCode           String?                 @map("error_code") @db.VarChar(64)
+  error               String?                 @db.VarChar(2000)
+  retryable           Boolean?
+  httpStatus          Int?                    @map("http_status")
+  /// Every request of the chain: URL, DNS answers, pinned address, status, Location.
+  hops                Json
+  finalUrl            String?                 @map("final_url") @db.VarChar(2048)
+  declaredContentType String?                 @map("declared_content_type") @db.VarChar(255)
+  declaredLength      BigInt?                 @map("declared_length")
+  bytesReceived       BigInt                  @default(0) @map("bytes_received")
+  sha256              String?                 @db.Char(64)
+  startedAt           DateTime                @default(now()) @map("started_at") @db.Timestamptz(3)
+  finishedAt          DateTime?               @map("finished_at") @db.Timestamptz(3)
+  durationMs          Int?                    @map("duration_ms")
+
+  @@unique([requestId, attempt])
+  @@index([startedAt])
+  @@map("download_attempts")
+}
+
+/// Content stored in object storage, unique by SHA-256 (duplicate detection).
+model StoredArtifact {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  sha256              String                  @unique @db.Char(64)
+  sizeBytes           BigInt                  @map("size_bytes")
+  /// MIME type sniffed from the content (the object itself is always stored as octet-stream).
+  mimeType            String                  @map("mime_type") @db.VarChar(128)
+  detectedType        String                  @map("detected_type") @db.VarChar(32)
+  declaredContentType String?                 @map("declared_content_type") @db.VarChar(255)
+  /// Untrusted, sanitised name suggested by the source. Never a path or an object key.
+  originalFilename    String?                 @map("original_filename") @db.VarChar(255)
+  storageBucket       String                  @map("storage_bucket") @db.VarChar(63)
+  /// Generated key (`quarantine/<yyyy>/<mm>/<id>`), never derived from source input.
+  storageKey          String                  @unique @map("storage_key") @db.VarChar(255)
+  /// Key of the released copy while the artifact is released.
+  releasedKey         String?                 @map("released_key") @db.VarChar(255)
+  /// Provenance of the first download (all downloads: `artifact_sources`).
+  source              String                  @db.VarChar(32)
+  sourceUrl           String                  @map("source_url") @db.VarChar(2048)
+  sourceRepository    String?                 @map("source_repository") @db.VarChar(200)
+  cveIds              String[]                @map("cve_ids")
+  riskIndicators      String[]                @map("risk_indicators")
+  lifecycleStatus     ArtifactLifecycleStatus @default(quarantined) @map("lifecycle_status")
+  scanStatus          ArtifactScanStatus      @default(pending) @map("scan_status")
+  /// Combined analysts' verification of the linked PoC artifacts (projection).
+  verificationStatus  VerificationStatus      @default(unverified) @map("verification_status")
+  /// Set while a scan job is queued or running.
+  scanQueuedAt        DateTime?               @map("scan_queued_at") @db.Timestamptz(3)
+  lastScannedAt       DateTime?               @map("last_scanned_at") @db.Timestamptz(3)
+  discoveredAt        DateTime                @map("discovered_at") @db.Timestamptz(3)
+  downloadedAt        DateTime                @map("downloaded_at") @db.Timestamptz(3)
+  releasedAt          DateTime?               @map("released_at") @db.Timestamptz(3)
+  releasedBy          String?                 @map("released_by") @db.VarChar(255)
+  version             Int                     @default(1)
+  createdAt           DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  requests        DownloadRequest[]
+  sources         ArtifactSource[]
+  scanResults     ScanResult[]
+  lifecycleEvents ArtifactLifecycleEvent[]
+
+  @@index([lifecycleStatus, downloadedAt])
+  @@index([scanStatus])
+  @@index([downloadedAt])
+  @@map("stored_artifacts")
+}
+
+/// Every download that produced (or duplicated) a stored artifact.
+model ArtifactSource {
+  id               String          @id @default(uuid()) @db.Uuid
+  artifactId       String          @map("artifact_id") @db.Uuid
+  artifact         StoredArtifact  @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  requestId        String          @unique @map("request_id") @db.Uuid
+  request          DownloadRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  source           String          @db.VarChar(32)
+  sourceUrl        String          @map("source_url") @db.VarChar(2048)
+  finalUrl         String?         @map("final_url") @db.VarChar(2048)
+  sourceRepository String?         @map("source_repository") @db.VarChar(200)
+  pocArtifactId    String?         @map("poc_artifact_id") @db.Uuid
+  commitSha        String?         @map("commit_sha") @db.Char(40)
+  cveIds           String[]        @map("cve_ids")
+  discoveredAt     DateTime        @map("discovered_at") @db.Timestamptz(3)
+  downloadedAt     DateTime        @map("downloaded_at") @db.Timestamptz(3)
+
+  @@index([artifactId])
+  @@index([pocArtifactId])
+  @@map("artifact_sources")
+}
+
+/// Scanner results; one row per scanner per scan run (rescans add rows).
+model ScanResult {
+  id               String         @id @default(uuid()) @db.Uuid
+  artifactId       String         @map("artifact_id") @db.Uuid
+  artifact         StoredArtifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  scanRunId        String         @map("scan_run_id") @db.Uuid
+  scanner          String         @db.VarChar(32)
+  verdict          ScanVerdict
+  findings         Json
+  engineVersion    String?        @map("engine_version") @db.VarChar(255)
+  signatureVersion String?        @map("signature_version") @db.VarChar(255)
+  error            String?        @db.VarChar(2000)
+  startedAt        DateTime       @map("started_at") @db.Timestamptz(3)
+  finishedAt       DateTime       @map("finished_at") @db.Timestamptz(3)
+
+  @@index([artifactId, finishedAt])
+  @@index([scanRunId])
+  @@map("scan_results")
+}
+
+/// Append-only lifecycle history (a trigger refuses updates and deletes).
+model ArtifactLifecycleEvent {
+  id            String                   @id @default(uuid()) @db.Uuid
+  artifactId    String                   @map("artifact_id") @db.Uuid
+  artifact      StoredArtifact           @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  fromStatus    ArtifactLifecycleStatus? @map("from_status")
+  toStatus      ArtifactLifecycleStatus  @map("to_status")
+  reason        String                   @db.VarChar(2000)
+  actorId       String                   @map("actor_id") @db.VarChar(255)
+  actorUsername String?                  @map("actor_username") @db.VarChar(255)
+  correlationId String?                  @map("correlation_id") @db.VarChar(128)
+  createdAt     DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([artifactId, createdAt])
+  @@map("artifact_lifecycle_events")
+}
+
+/// Local projection of PoC artifacts (`poc.artifact.discovered`, `…verification-changed`).
+model PocArtifactState {
+  pocArtifactId      String             @id @map("poc_artifact_id") @db.Uuid
+  repositoryId       String             @map("repository_id") @db.Uuid
+  repositoryFullName String?            @map("repository_full_name") @db.VarChar(200)
+  commitSha          String             @map("commit_sha") @db.Char(40)
+  cveIds             String[]           @map("cve_ids")
+  totalBytes         BigInt?            @map("total_bytes")
+  verificationStatus VerificationStatus @map("verification_status")
+  /// Version of the PoC artifact the status belongs to (events can arrive out of order).
+  verificationVersion Int               @default(0) @map("verification_version")
+  eventOccurredAt    DateTime           @map("event_occurred_at") @db.Timestamptz(3)
+  updatedAt          DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("poc_artifact_states")
+}
+
+/// Inbox for duplicate suppression of consumed events.
+model ProcessedEvent {
+  id          String   @id @default(uuid()) @db.Uuid
+  consumer    String   @db.VarChar(64)
+  eventId     String   @map("event_id") @db.Uuid
+  processedAt DateTime @default(now()) @map("processed_at") @db.Timestamptz(3)
+
+  @@unique([consumer, eventId])
+  @@index([processedAt])
+  @@map("processed_events")
+}
+
+/// Transactional outbox for domain events (published by OutboxRelay).
+model OutboxEvent {
+  id            String    @id @default(uuid()) @db.Uuid
+  eventId       String    @unique @map("event_id") @db.Uuid
+  eventType     String    @map("event_type") @db.VarChar(128)
+  envelope      Json
+  attempts      Int       @default(0)
+  lastError     String?   @map("last_error") @db.VarChar(2000)
+  nextAttemptAt DateTime  @default(now()) @map("next_attempt_at") @db.Timestamptz(3)
+  lockedUntil   DateTime? @map("locked_until") @db.Timestamptz(3)
+  publishedAt   DateTime? @map("published_at") @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([publishedAt, nextAttemptAt])
+  @@map("outbox_events")
+}
