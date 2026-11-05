@@ -1,4 +1,4 @@
-import { isAbsolute } from 'node:path';
+import { isAbsolute, resolve } from 'node:path';
 
 import {
   booleanStringSchema,
@@ -83,6 +83,13 @@ const absolutePath = z
   .trim()
   .refine((value) => isAbsolute(value), { message: 'must be an absolute path' });
 
+/** A file path; a relative one is resolved against the working directory (local development). */
+const filePath = z
+  .string()
+  .trim()
+  .min(1)
+  .transform((value) => resolve(value));
+
 export const envSchema = serviceEnvSchema(SERVICE_DEFAULT_PORTS[SERVICE_NAME])
   .extend(objectStorageEnvSchema.shape)
   .extend({
@@ -157,7 +164,7 @@ export const envSchema = serviceEnvSchema(SERVICE_DEFAULT_PORTS[SERVICE_NAME])
     CLAMAV_TIMEOUT_MS: int(1_000, 30 * MINUTE_MS).default(5 * MINUTE_MS),
     YARA_ENABLED: booleanStringSchema.default(true),
     YARA_BINARY: absolutePath.default('/usr/bin/yara'),
-    YARA_RULES_PATH: absolutePath.default('/app/yara/index.yar'),
+    YARA_RULES_PATH: filePath.default('/app/yara/index.yar'),
     YARA_TIMEOUT_MS: int(1_000, 30 * MINUTE_MS).default(2 * MINUTE_MS),
   })
   .superRefine((env, ctx) => {

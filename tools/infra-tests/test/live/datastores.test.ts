@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { request } from 'node:https';
 
 import {
+  CopyObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   ListObjectsV2Command,
@@ -86,44 +87,43 @@ describe.runIf(devPorts)('MinIO bucket policies', () => {
   const body = Buffer.from('inert test content');
   const denied = /AccessDenied|Access Denied/;
 
-  it('lets the Download Service write only to quarantine', async () => {
+  it('lets the Download Service manage quarantine and released artifacts only', async () => {
     await download.send(
       new PutObjectCommand({ Bucket: OBJECT_STORAGE_BUCKETS.pocQuarantine, Key: key, Body: body }),
     );
-    await expect(
-      download.send(
-        new PutObjectCommand({ Bucket: OBJECT_STORAGE_BUCKETS.pocArtifacts, Key: key, Body: body }),
-      ),
-    ).rejects.toThrow(denied);
+    // Releasing copies the object from quarantine into the released bucket.
+    await download.send(
+      new CopyObjectCommand({
+        Bucket: OBJECT_STORAGE_BUCKETS.pocArtifacts,
+        Key: key,
+        CopySource: `${OBJECT_STORAGE_BUCKETS.pocQuarantine}/${key}`,
+      }),
+    );
     await expect(
       download.send(new ListObjectsV2Command({ Bucket: OBJECT_STORAGE_BUCKETS.reports })),
     ).rejects.toThrow(denied);
-    // It cannot delete what it stored; releases and deletions belong to the PoC Service.
-    await expect(
-      download.send(
-        new DeleteObjectCommand({ Bucket: OBJECT_STORAGE_BUCKETS.pocQuarantine, Key: key }),
-      ),
-    ).rejects.toThrow(denied);
   });
 
-  it('lets the PoC Service read quarantine and publish released artifacts, but not write quarantine', async () => {
+  it('gives the PoC Service read access to released artifacts only', async () => {
     const object = await poc.send(
-      new GetObjectCommand({ Bucket: OBJECT_STORAGE_BUCKETS.pocQuarantine, Key: key }),
+      new GetObjectCommand({ Bucket: OBJECT_STORAGE_BUCKETS.pocArtifacts, Key: key }),
     );
     expect(await object.Body?.transformToString()).toBe('inert test content');
-    await poc.send(
-      new PutObjectCommand({ Bucket: OBJECT_STORAGE_BUCKETS.pocArtifacts, Key: key, Body: body }),
-    );
+    await expect(
+      poc.send(new GetObjectCommand({ Bucket: OBJECT_STORAGE_BUCKETS.pocQuarantine, Key: key })),
+    ).rejects.toThrow(denied);
     await expect(
       poc.send(
-        new PutObjectCommand({
-          Bucket: OBJECT_STORAGE_BUCKETS.pocQuarantine,
-          Key: `${key}.x`,
-          Body: body,
-        }),
+        new PutObjectCommand({ Bucket: OBJECT_STORAGE_BUCKETS.pocArtifacts, Key: `${key}.x`, Body: body }),
       ),
     ).rejects.toThrow(denied);
-    await poc.send(
+    await expect(
+      poc.send(new DeleteObjectCommand({ Bucket: OBJECT_STORAGE_BUCKETS.pocArtifacts, Key: key })),
+    ).rejects.toThrow(denied);
+    await download.send(
+      new DeleteObjectCommand({ Bucket: OBJECT_STORAGE_BUCKETS.pocArtifacts, Key: key }),
+    );
+    await download.send(
       new DeleteObjectCommand({ Bucket: OBJECT_STORAGE_BUCKETS.pocQuarantine, Key: key }),
     );
   });

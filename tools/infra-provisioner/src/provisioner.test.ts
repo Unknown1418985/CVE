@@ -67,6 +67,10 @@ describe('renderDevEnvFiles', () => {
     expect(cve).toContain('OPENSEARCH_USERNAME=cve-service');
     expect(cve).not.toContain(values.get('POC_SERVICE_DB_PASSWORD') ?? 'x');
     expect(files['services/download-service/.env']).toContain('S3_ACCESS_KEY_ID=download-service');
+    expect(files['services/download-service/.env']).toContain('CLAMAV_HOST=localhost');
+    for (const service of ['asset-service', 'poc-service', 'download-service']) {
+      expect(files[`services/${service}/.env`]).toContain('KEYCLOAK_URL=http://localhost:8180/auth');
+    }
     expect(files['services/asset-service/.env']).not.toContain('S3_');
     expect(files['apps/api-gateway/.env']).toContain('CVE_SERVICE_URL=http://localhost:4002');
     expect(files['apps/api-gateway/.env']).toContain(

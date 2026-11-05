@@ -17,3 +17,4 @@ next-env.d.ts
 
 # Prisma clients are generated at build time (`prisma generate`).
 **/src/generated/
+dump.rdb

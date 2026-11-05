@@ -85,8 +85,8 @@ Every backend service gets its own credentials for each store, scoped to what it
 | Redis      | `metrics` / `admin`        | Exporter introspection only / operators only; the `default` user is disabled                                                          |
 | RabbitMQ   | `<service>` on vhost `cve` | Configure `^<service>\..*$`; write/read `cve.events` and its own resources; 10 connections, 200 channels; no management access        |
 | RabbitMQ   | `${RABBITMQ_ADMIN_USER}`   | Administrator; `guest` does not exist                                                                                                 |
-| MinIO      | `download-service`         | Put/get in `cve-poc-quarantine` only (cannot delete)                                                                                  |
-| MinIO      | `poc-service`              | Read/delete quarantine, write `cve-poc-artifacts`                                                                                     |
+| MinIO      | `download-service`         | Owns artifact storage: put/get/delete in `cve-poc-quarantine` and `cve-poc-artifacts`                                                 |
+| MinIO      | `poc-service`              | Read released artifacts in `cve-poc-artifacts` only                                                                                   |
 | MinIO      | `reporting-service`        | `cve-reports` only                                                                                                                    |
 | OpenSearch | `cve-service`              | `cve-*` indices (CRUD, create, manage); no security API                                                                               |
 | Keycloak   | `cve-identity-service`     | Service account with `view-users`, `query-users`, `manage-users`, `view-realm`                                                        |

@@ -394,6 +394,91 @@ describe('PoC Service routes', () => {
   });
 });
 
+describe('Download Service routes', () => {
+  const id = '00000000-0000-4000-8000-000000000002';
+
+  it('maps reads, scheduling, quarantine decisions and content to their permissions', async () => {
+    const app = await start(backend(ok));
+    const viewer = await issuer.tokenFor(randomUUID(), ['viewer']);
+    const analyst = await issuer.tokenFor(randomUUID(), ['security-analyst']);
+    const researcher = await issuer.tokenFor(randomUUID(), ['vulnerability-researcher']);
+    const admin = await issuer.tokenFor(randomUUID(), ['administrator']);
+
+    await app.http.get('/api/v1/download-artifacts').expect(401);
+    await app.http.get('/api/v1/download-artifacts').set(bearer(viewer)).expect(403);
+    await app.http.get('/api/v1/download-sources').set(bearer(analyst)).expect(200);
+    await app.http.get(`/api/v1/download-artifacts/${id}/scans`).set(bearer(analyst)).expect(200);
+    await app.http.post('/api/v1/download-requests').set(bearer(analyst)).send({}).expect(403);
+    await app.http.post('/api/v1/download-requests').set(bearer(researcher)).send({}).expect(200);
+    await app.http
+      .post(`/api/v1/download-requests/${id}/retry`)
+      .set(bearer(researcher))
+      .send({})
+      .expect(200);
+    await app.http
+      .post(`/api/v1/download-artifacts/${id}/lifecycle`)
+      .set(bearer(researcher))
+      .send({})
+      .expect(403);
+    await app.http
+      .post(`/api/v1/download-artifacts/${id}/lifecycle`)
+      .set(bearer(admin))
+      .send({})
+      .expect(200);
+    await app.http.post(`/api/v1/download-artifacts/${id}/content`).set(bearer(admin)).expect(404);
+    await app.http.get(`/api/v1/download-artifacts/${id}/content`).set(bearer(viewer)).expect(403);
+
+    expect(forwarded.map((request) => `${request.method} ${request.url}`)).toEqual([
+      'GET http://download-service.internal:4000/api/v1/download-sources',
+      `GET http://download-service.internal:4000/api/v1/download-artifacts/${id}/scans`,
+      'POST http://download-service.internal:4000/api/v1/download-requests',
+      `POST http://download-service.internal:4000/api/v1/download-requests/${id}/retry`,
+      `POST http://download-service.internal:4000/api/v1/download-artifacts/${id}/lifecycle`,
+    ]);
+  });
+
+  it('streams artifact content with the backend download headers', async () => {
+    const content = Buffer.alloc(64 * 1024, 7);
+    const app = await start(
+      backend(
+        () =>
+          new Response(content, {
+            status: 200,
+            headers: {
+              'content-type': 'application/octet-stream',
+              'content-length': String(content.length),
+              'content-disposition': `attachment; filename="artifact-${id}.gz"`,
+              'x-content-type-options': 'nosniff',
+              'content-security-policy': "sandbox; default-src 'none'",
+              'cache-control': 'no-store',
+              'x-artifact-sha256': 'a'.repeat(64),
+              'set-cookie': 'leak=1',
+            },
+          }),
+      ),
+    );
+    const analyst = await issuer.tokenFor(randomUUID(), ['security-analyst']);
+    const response = await app.http
+      .get(`/api/v1/download-artifacts/${id}/content`)
+      .set(bearer(analyst))
+      .buffer(true)
+      .parse((res, callback) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk: Buffer) => chunks.push(chunk));
+        res.on('end', () => {
+          callback(null, Buffer.concat(chunks));
+        });
+      })
+      .expect(200);
+    expect(Buffer.compare(response.body as Buffer, content)).toBe(0);
+    expect(response.headers['content-disposition']).toBe(`attachment; filename="artifact-${id}.gz"`);
+    expect(response.headers['x-content-type-options']).toBe('nosniff');
+    expect(response.headers['content-security-policy']).toContain('sandbox');
+    expect(response.headers['x-artifact-sha256']).toBe('a'.repeat(64));
+    expect(response.headers['set-cookie']).toBeUndefined();
+  });
+});
+
 describe('CVE Service routes', () => {
   it('requires cve:read to read and cve:manage to write', async () => {
     const app = await start(backend(ok));

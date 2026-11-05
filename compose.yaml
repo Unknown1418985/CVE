@@ -300,6 +300,32 @@ services:
           memory: 512M
           pids: 512
 
+  clamav:
+    # clamd for the Download Service (INSTREAM over TCP 3310); freshclam keeps signatures current.
+    # Only the Download Service reaches it (internal `scanning` network); egress is for freshclam.
+    image: ${CLAMAV_IMAGE:-clamav/clamav:1.4.3}
+    restart: unless-stopped
+    <<: [*hardening, *logging]
+    # The entrypoint prepares its directories as root, then runs clamd and freshclam as clamav.
+    cap_add: [CHOWN, SETUID, SETGID, DAC_OVERRIDE]
+    environment:
+      CLAMAV_NO_MILTERD: 'true'
+    volumes:
+      - clamav-data:/var/lib/clamav
+    networks: [scanning, egress]
+    healthcheck:
+      test: ['CMD', 'clamdcheck.sh']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 300s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 3G
+          pids: 256
+
   # ============================================================================ provisioning jobs
   minio-init:
     image: ${MINIO_IMAGE:-pgsty/minio:RELEASE.2026-08-04T00-00-00Z}
@@ -713,7 +739,7 @@ services:
       DATABASE_URL: postgresql://poc_service:${POC_SERVICE_DB_PASSWORD}@postgres:5432/poc_service
       REDIS_URL: redis://poc-service:${POC_SERVICE_REDIS_PASSWORD}@redis:6379
       RABBITMQ_URL: amqp://poc-service:${POC_SERVICE_RABBITMQ_PASSWORD}@rabbitmq:5672/cve
-      # Reserved for artifact storage (Phase 6); discovery itself stores metadata only.
+      # Read-only on released artifacts; the Download Service owns artifact storage.
       S3_ACCESS_KEY_ID: poc-service
       S3_SECRET_ACCESS_KEY: ${POC_SERVICE_MINIO_SECRET_KEY}
       # Tokens are validated against the realm JWKS (internal URL); the issuer is the public URL.
@@ -733,13 +759,49 @@ services:
       poc-service-migrate:
         condition: service_completed_successfully
 
-  download-service:
-    <<: *backend-service
+  # Applies the Download Service's Prisma migrations, then exits.
+  download-service-migrate:
+    profiles: [apps]
+    image: cve-platform/download-service:local
     build:
       context: .
       dockerfile: infra/docker/node-service.Dockerfile
       args:
         PACKAGE: '@cve/download-service'
+        RUNTIME_APK_PACKAGES: yara
+    restart: 'no'
+    read_only: true
+    tmpfs:
+      - /tmp
+    <<: [*hardening, *logging]
+    command: ['node', 'node_modules/prisma/build/index.js', 'migrate', 'deploy']
+    environment:
+      DATABASE_URL: postgresql://download_service:${DOWNLOAD_SERVICE_DB_PASSWORD}@postgres:5432/download_service
+    networks: [data]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+          pids: 128
+
+  download-service:
+    <<: *backend-service
+    image: cve-platform/download-service:local
+    build:
+      context: .
+      dockerfile: infra/docker/node-service.Dockerfile
+      args:
+        PACKAGE: '@cve/download-service'
+        # The YARA command-line scanner; it only reads staged files as bytes.
+        RUNTIME_APK_PACKAGES: yara
+    # Private staging for downloads and scans (owner-only files, never executed: noexec).
+    tmpfs:
+      - /tmp
+      - /var/lib/download-staging:size=512m,mode=0700,uid=1000,gid=1000,noexec,nosuid,nodev
     environment:
       <<: [*backend-env, *object-storage-env]
       PORT: 4006
@@ -748,11 +810,31 @@ services:
       RABBITMQ_URL: amqp://download-service:${DOWNLOAD_SERVICE_RABBITMQ_PASSWORD}@rabbitmq:5672/cve
       S3_ACCESS_KEY_ID: download-service
       S3_SECRET_ACCESS_KEY: ${DOWNLOAD_SERVICE_MINIO_SECRET_KEY}
+      KEYCLOAK_URL: http://keycloak:8180/auth
+      KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8080/auth}
+      DOWNLOAD_STAGING_DIR: /var/lib/download-staging
+      # Approved sources (github-archive, exploit-db) and which of them download automatically.
+      DOWNLOAD_SOURCES_ENABLED: ${DOWNLOAD_SOURCES_ENABLED:-github-archive}
+      DOWNLOAD_AUTOMATIC_SOURCES: ${DOWNLOAD_AUTOMATIC_SOURCES:-github-archive}
+      DOWNLOAD_MAX_BYTES: ${DOWNLOAD_MAX_BYTES:-104857600}
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: '3310'
+      SCAN_REQUIRED_SCANNERS: ${SCAN_REQUIRED_SCANNERS:-clamav,yara}
     # Downloads untrusted artifacts from allowlisted sources: needs outbound internet access.
-    networks: [backend, data, observability, egress]
+    networks: [backend, data, observability, egress, scanning]
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 1G
+          pids: 256
     depends_on:
       <<: *backend-depends
+      keycloak:
+        condition: service_healthy
       minio-init:
+        condition: service_completed_successfully
+      download-service-migrate:
         condition: service_completed_successfully
 
   exploit-service:
@@ -1024,6 +1106,9 @@ networks:
     internal: true
   # Outbound internet access for services that synchronise external sources.
   egress:
+  # Download Service ↔ ClamAV. No internet access.
+  scanning:
+    internal: true
   # Prometheus scrape traffic. No internet access.
   observability:
     internal: true
@@ -1040,5 +1125,6 @@ volumes:
   opensearch-security:
   platform-ca:
   minio-data:
+  clamav-data:
   prometheus-data:
   grafana-data:

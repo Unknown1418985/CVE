@@ -26,9 +26,11 @@ RUN pnpm turbo run build --filter="${PACKAGE}"
 RUN pnpm --filter "${PACKAGE}" deploy --legacy --prod /deploy
 
 FROM ${NODE_IMAGE} AS runtime
+# Extra Alpine packages a service needs at runtime (the Download Service: yara).
+ARG RUNTIME_APK_PACKAGES=""
 ENV NODE_ENV=production
 WORKDIR /app
-RUN apk add --no-cache tini
+RUN apk add --no-cache tini ${RUNTIME_APK_PACKAGES}
 COPY --from=builder --chown=node:node /deploy ./
 USER node
 ENTRYPOINT ["/sbin/tini", "--"]
