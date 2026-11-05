@@ -157,6 +157,12 @@ await worker.start();
 - **Intelligence Service** (Phase 3): `PrismaOutboxStore` + `OutboxRelay` publish the
   `intelligence.*` observation, KEV, EPSS and sync-run events, and BullMQ job schedulers run each
   source on its cron plus a maintenance job that recovers abandoned runs (see
-  [intelligence-service.md](intelligence-service.md)). No service consumes these events yet.
+  [intelligence-service.md](intelligence-service.md)).
+- **Asset Service** (Phase 4): the first consumer. It consumes
+  `intelligence.cve-observation.recorded` (queue `asset-service.cve-observation-products`) and
+  `cve.record.*` (queue `asset-service.cve-record-facts`), with duplicate suppression in a
+  `processed_events` inbox table written in the handler's transaction, and publishes
+  `asset.vendor.*`, `asset.product.*` and `asset.cve-association.*` through its outbox (see
+  [asset-service.md](asset-service.md)).
 - The other services do not open RabbitMQ or Redis connections yet; their first producers,
   consumers and jobs arrive with their features.

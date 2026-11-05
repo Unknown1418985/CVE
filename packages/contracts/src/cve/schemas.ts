@@ -53,7 +53,7 @@ export const sourceIdentifierSchema = z
 const CONTROL_CHARACTERS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
 
 /** Free text without control characters other than tab and newline. */
-function textSchema(max: number) {
+export function textSchema(max: number) {
   return z
     .string()
     .trim()
@@ -62,14 +62,14 @@ function textSchema(max: number) {
     .refine((value) => !CONTROL_CHARACTERS.test(value), { message: 'contains control characters' });
 }
 
-const versionTextSchema = z
+export const versionTextSchema = z
   .string()
   .trim()
   .min(1)
   .max(128)
   .regex(/^[^\p{Cc}\s]+$/u, { message: 'must not contain whitespace or control characters' });
 
-const productNameSchema = textSchema(128);
+export const productNameSchema = textSchema(128);
 
 export const httpReferenceUrlSchema = z
   .string()
@@ -90,7 +90,9 @@ export const httpReferenceUrlSchema = z
   )
   .transform((value) => new URL(value).href);
 
-const timestampSchema = z.iso.datetime({ offset: true }).transform((value) => new Date(value));
+export const timestampSchema = z.iso
+  .datetime({ offset: true })
+  .transform((value) => new Date(value));
 const dateOnlySchema = z.iso.date();
 
 // ---------------------------------------------------------------------------- write models
@@ -540,7 +542,7 @@ export const CVE_SORT_FIELDS = [
 export type CveSortField = (typeof CVE_SORT_FIELDS)[number];
 
 /** Accepts `a,b` or repeated query parameters. */
-function listParam<T extends z.ZodType>(item: T, max: number) {
+export function listParam<T extends z.ZodType>(item: T, max: number) {
   return z.preprocess(
     (value: unknown): unknown[] =>
       (Array.isArray(value) ? (value as unknown[]) : [value])
@@ -551,7 +553,7 @@ function listParam<T extends z.ZodType>(item: T, max: number) {
   );
 }
 
-const booleanParam = z.enum(['true', 'false']).transform((value) => value === 'true');
+export const booleanParam = z.enum(['true', 'false']).transform((value) => value === 'true');
 const scoreParam = z.coerce.number().min(0).max(10);
 const probabilityParam = z.coerce.number().min(0).max(1);
 

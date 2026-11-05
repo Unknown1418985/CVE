@@ -9,3 +9,4 @@ export * from './services.js';
 export * from './storage.js';
 export * from './cve/index.js';
 export * from './intelligence/index.js';
+export * from './asset/index.js';

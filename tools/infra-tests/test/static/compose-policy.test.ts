@@ -52,6 +52,7 @@ const JOBS = new Set([
   'identity-service-migrate',
   'cve-service-migrate',
   'intelligence-service-migrate',
+  'asset-service-migrate',
 ]);
 const DATA_STORES = ['postgres', 'redis', 'rabbitmq', 'opensearch', 'minio'];
 const EGRESS_ALLOWED = new Set([

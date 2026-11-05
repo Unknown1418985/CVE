@@ -619,8 +619,37 @@ services:
       intelligence-service-migrate:
         condition: service_completed_successfully
 
+  # Applies the Asset Service's Prisma migrations, then exits.
+  asset-service-migrate:
+    profiles: [apps]
+    image: cve-platform/asset-service:local
+    build:
+      context: .
+      dockerfile: infra/docker/node-service.Dockerfile
+      args:
+        PACKAGE: '@cve/asset-service'
+    restart: 'no'
+    read_only: true
+    tmpfs:
+      - /tmp
+    <<: [*hardening, *logging]
+    command: ['node', 'node_modules/prisma/build/index.js', 'migrate', 'deploy']
+    environment:
+      DATABASE_URL: postgresql://asset_service:${ASSET_SERVICE_DB_PASSWORD}@postgres:5432/asset_service
+    networks: [data]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+          pids: 128
+
   asset-service:
     <<: *backend-service
+    image: cve-platform/asset-service:local
     build:
       context: .
       dockerfile: infra/docker/node-service.Dockerfile
@@ -632,7 +661,15 @@ services:
       DATABASE_URL: postgresql://asset_service:${ASSET_SERVICE_DB_PASSWORD}@postgres:5432/asset_service
       REDIS_URL: redis://asset-service:${ASSET_SERVICE_REDIS_PASSWORD}@redis:6379
       RABBITMQ_URL: amqp://asset-service:${ASSET_SERVICE_RABBITMQ_PASSWORD}@rabbitmq:5672/cve
-    depends_on: *backend-depends
+      # Tokens are validated against the realm JWKS (internal URL); the issuer is the public URL.
+      KEYCLOAK_URL: http://keycloak:8180/auth
+      KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8080/auth}
+    depends_on:
+      <<: *backend-depends
+      keycloak:
+        condition: service_healthy
+      asset-service-migrate:
+        condition: service_completed_successfully
 
   poc-service:
     <<: *backend-service

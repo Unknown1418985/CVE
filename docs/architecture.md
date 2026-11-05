@@ -37,7 +37,7 @@ This document describes the structure established in Phase 0. It is updated as e
 | identity-service     | 4001 | Users, roles, permissions, audit log (Keycloak as identity provider) |
 | cve-service          | 4002 | CVE records, CVSS v3.1/v4.0, CWE, affected products, references      |
 | intelligence-service | 4003 | Source adapters, synchronisation state and logs, raw source records  |
-| asset-service        | 4004 | Vendors, products, CPE normalisation                                 |
+| asset-service        | 4004 | Vendors, products, CPE names, CVE-to-product associations, analytics |
 | poc-service          | 4005 | PoC metadata, source repositories, CVE associations, verification    |
 | download-service     | 4006 | Download jobs, artifacts, hashes, scan results, quarantine, MinIO    |
 | exploit-service      | 4007 | Exploit records and CVE/exploit/PoC relationships                    |

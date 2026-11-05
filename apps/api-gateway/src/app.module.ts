@@ -9,6 +9,7 @@ import { HealthModule } from '@cve/shared';
 import { createGatewayAuth } from './auth/gateway-auth.js';
 import { UserThrottlerGuard } from './auth/user-throttler.guard.js';
 import { serviceRegistryFromEnv, type Env } from './config/env.js';
+import { AssetProxyController } from './proxy/asset-proxy.controller.js';
 import { CveProxyController } from './proxy/cve-proxy.controller.js';
 import { IdentityProxyController } from './proxy/identity-proxy.controller.js';
 import { IntelligenceProxyController } from './proxy/intelligence-proxy.controller.js';
@@ -78,7 +79,12 @@ export class AppModule {
           fetch: fetchFn,
         }),
       ],
-      controllers: [IdentityProxyController, CveProxyController, IntelligenceProxyController],
+      controllers: [
+        IdentityProxyController,
+        CveProxyController,
+        IntelligenceProxyController,
+        AssetProxyController,
+      ],
       providers: [
         { provide: PROXY_OPTIONS, useValue: proxyOptions },
         ProxyService,
