@@ -837,8 +837,37 @@ services:
       download-service-migrate:
         condition: service_completed_successfully
 
+  # Applies the Exploit Service's Prisma migrations, then exits.
+  exploit-service-migrate:
+    profiles: [apps]
+    image: cve-platform/exploit-service:local
+    build:
+      context: .
+      dockerfile: infra/docker/node-service.Dockerfile
+      args:
+        PACKAGE: '@cve/exploit-service'
+    restart: 'no'
+    read_only: true
+    tmpfs:
+      - /tmp
+    <<: [*hardening, *logging]
+    command: ['node', 'node_modules/prisma/build/index.js', 'migrate', 'deploy']
+    environment:
+      DATABASE_URL: postgresql://exploit_service:${EXPLOIT_SERVICE_DB_PASSWORD}@postgres:5432/exploit_service
+    networks: [data]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+          pids: 128
+
   exploit-service:
     <<: *backend-service
+    image: cve-platform/exploit-service:local
     build:
       context: .
       dockerfile: infra/docker/node-service.Dockerfile
@@ -850,8 +879,27 @@ services:
       DATABASE_URL: postgresql://exploit_service:${EXPLOIT_SERVICE_DB_PASSWORD}@postgres:5432/exploit_service
       REDIS_URL: redis://exploit-service:${EXPLOIT_SERVICE_REDIS_PASSWORD}@redis:6379
       RABBITMQ_URL: amqp://exploit-service:${EXPLOIT_SERVICE_RABBITMQ_PASSWORD}@rabbitmq:5672/cve
+      # Tokens are validated against the realm JWKS (internal URL); the issuer is the public URL.
+      KEYCLOAK_URL: http://keycloak:8180/auth
+      KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8080/auth}
+      # Approved catalogs (metasploit, exploit-db). Exploit-DB is off by default: review its terms
+      # of use before enabling it. Metadata only: exploit code is never downloaded or run here.
+      EXPLOIT_CATALOGS_ENABLED: ${EXPLOIT_CATALOGS_ENABLED:-metasploit}
+    # Downloads the catalog metadata files (Metasploit, Exploit-DB): needs outbound internet access.
     networks: [backend, data, observability, egress]
-    depends_on: *backend-depends
+    # A catalog file is parsed in memory (up to CATALOG_MAX_RESPONSE_BYTES).
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 1G
+          pids: 256
+    depends_on:
+      <<: *backend-depends
+      keycloak:
+        condition: service_healthy
+      exploit-service-migrate:
+        condition: service_completed_successfully
 
   reporting-service:
     <<: *backend-service
