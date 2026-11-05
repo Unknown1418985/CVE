@@ -671,8 +671,37 @@ services:
       asset-service-migrate:
         condition: service_completed_successfully
 
+  # Applies the PoC Service's Prisma migrations, then exits.
+  poc-service-migrate:
+    profiles: [apps]
+    image: cve-platform/poc-service:local
+    build:
+      context: .
+      dockerfile: infra/docker/node-service.Dockerfile
+      args:
+        PACKAGE: '@cve/poc-service'
+    restart: 'no'
+    read_only: true
+    tmpfs:
+      - /tmp
+    <<: [*hardening, *logging]
+    command: ['node', 'node_modules/prisma/build/index.js', 'migrate', 'deploy']
+    environment:
+      DATABASE_URL: postgresql://poc_service:${POC_SERVICE_DB_PASSWORD}@postgres:5432/poc_service
+    networks: [data]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+          pids: 128
+
   poc-service:
     <<: *backend-service
+    image: cve-platform/poc-service:local
     build:
       context: .
       dockerfile: infra/docker/node-service.Dockerfile
@@ -684,13 +713,24 @@ services:
       DATABASE_URL: postgresql://poc_service:${POC_SERVICE_DB_PASSWORD}@postgres:5432/poc_service
       REDIS_URL: redis://poc-service:${POC_SERVICE_REDIS_PASSWORD}@redis:6379
       RABBITMQ_URL: amqp://poc-service:${POC_SERVICE_RABBITMQ_PASSWORD}@rabbitmq:5672/cve
+      # Reserved for artifact storage (Phase 6); discovery itself stores metadata only.
       S3_ACCESS_KEY_ID: poc-service
       S3_SECRET_ACCESS_KEY: ${POC_SERVICE_MINIO_SECRET_KEY}
-    # Discovers PoCs on GitHub and Exploit-DB: needs outbound internet access.
+      # Tokens are validated against the realm JWKS (internal URL); the issuer is the public URL.
+      KEYCLOAK_URL: http://keycloak:8180/auth
+      KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8080/auth}
+      # Approved connectors (github, cve-references). An optional GitHub token raises the quotas.
+      POC_CONNECTORS_ENABLED: ${POC_CONNECTORS_ENABLED:-github,cve-references}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+    # Reads repository metadata from the GitHub REST API: needs outbound internet access.
     networks: [backend, data, observability, egress]
     depends_on:
       <<: *backend-depends
+      keycloak:
+        condition: service_healthy
       minio-init:
+        condition: service_completed_successfully
+      poc-service-migrate:
         condition: service_completed_successfully
 
   download-service:

@@ -1,0 +1,411 @@
+// PoC Service schema. Owned exclusively by poc-service (database `poc_service`).
+// CVEs are referenced by their stable CVE ID; CVE facts used for scheduling are a local
+// projection of `cve.record.*` events, never read from the CVE Service database.
+//
+// Everything stored here is metadata. Repository content (files) is never downloaded by this
+// service; text written by repository owners is untrusted and stored only after sanitisation.
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum OwnerType {
+  user
+  organization
+  bot
+  unknown
+
+  @@map("owner_type")
+}
+
+enum RepositoryStatus {
+  active
+  unavailable
+
+  @@map("repository_status")
+}
+
+enum AssociationReviewStatus {
+  candidate
+  confirmed
+  rejected
+
+  @@map("association_review_status")
+}
+
+enum AssociationOrigin {
+  discovered
+  manual
+
+  @@map("association_origin")
+}
+
+enum ConfidenceLevel {
+  high
+  medium
+  low
+
+  @@map("confidence_level")
+}
+
+enum VerificationStatus {
+  unverified
+  in_review  @map("in-review")
+  verified
+  rejected
+  malicious
+
+  @@map("verification_status")
+}
+
+enum DuplicateKind {
+  exact
+  near
+
+  @@map("duplicate_kind")
+}
+
+enum ReferenceKind {
+  github_repository @map("github-repository")
+  github_gist       @map("github-gist")
+  exploit_db        @map("exploit-db")
+  packet_storm      @map("packet-storm")
+  other
+
+  @@map("reference_kind")
+}
+
+enum DiscoveryRunStatus {
+  running
+  succeeded
+  failed
+
+  @@map("discovery_run_status")
+}
+
+/// Account owning repositories at a source (GitHub user or organisation).
+model RepositoryOwner {
+  id           String          @id @default(uuid()) @db.Uuid
+  source       String          @db.VarChar(32)
+  /// Stable account ID at the source; the login can change.
+  externalId   String          @map("external_id") @db.VarChar(64)
+  login        String          @db.VarChar(64)
+  loginKey     String          @map("login_key") @db.VarChar(64)
+  type         OwnerType
+  url          String          @db.VarChar(300)
+  firstSeenAt  DateTime        @default(now()) @map("first_seen_at") @db.Timestamptz(3)
+  lastSeenAt   DateTime        @default(now()) @map("last_seen_at") @db.Timestamptz(3)
+  repositories PocRepository[]
+
+  @@unique([source, externalId])
+  @@index([loginKey])
+  @@map("repository_owners")
+}
+
+/// A public repository that may contain a PoC. Metadata only.
+model PocRepository {
+  id                String           @id @default(uuid()) @db.Uuid
+  source            String           @db.VarChar(32)
+  /// Stable repository ID at the source (survives renames and transfers).
+  externalId        String           @map("external_id") @db.VarChar(64)
+  ownerId           String           @map("owner_id") @db.Uuid
+  owner             RepositoryOwner  @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  name              String           @db.VarChar(100)
+  fullName          String           @map("full_name") @db.VarChar(200)
+  /// Lower-case `owner/name`, to match reference URLs (GitHub names are case-insensitive).
+  fullNameKey       String           @map("full_name_key") @db.VarChar(200)
+  url               String           @db.VarChar(300)
+  /// Untrusted text written by the owner (sanitised, at most 1 000 characters).
+  description       String?          @db.VarChar(1000)
+  topics            String[]
+  language          String?          @db.VarChar(64)
+  stars             Int              @default(0)
+  forks             Int              @default(0)
+  isFork            Boolean          @map("is_fork")
+  parentFullName    String?          @map("parent_full_name") @db.VarChar(200)
+  isArchived        Boolean          @map("is_archived")
+  defaultBranch     String?          @map("default_branch") @db.VarChar(255)
+  sizeKb            Int              @default(0) @map("size_kb")
+  status            RepositoryStatus @default(active)
+  sourceCreatedAt   DateTime?        @map("source_created_at") @db.Timestamptz(3)
+  sourcePushedAt    DateTime?        @map("source_pushed_at") @db.Timestamptz(3)
+  /// SHA-256 of the stored metadata, to detect unchanged search results.
+  metadataHash      String           @map("metadata_hash") @db.Char(64)
+  discoveredBy      String           @map("discovered_by") @db.VarChar(32)
+  latestCommitSha   String?          @map("latest_commit_sha") @db.Char(40)
+  latestArtifactId  String?          @map("latest_artifact_id") @db.Uuid
+  /// True when the last inspection found no commits.
+  isEmpty           Boolean          @default(false) @map("is_empty")
+  maxConfidence     Decimal?         @map("max_confidence") @db.Decimal(4, 3)
+  /// Set when the repository needs an inspection; cleared by the inspection.
+  inspectionDueAt   DateTime?        @map("inspection_due_at") @db.Timestamptz(3)
+  lastInspectedAt   DateTime?        @map("last_inspected_at") @db.Timestamptz(3)
+  /// `sourcePushedAt` seen by the last inspection; a newer push needs a new inspection.
+  inspectedPushedAt DateTime?        @map("inspected_pushed_at") @db.Timestamptz(3)
+  firstDiscoveredAt DateTime         @default(now()) @map("first_discovered_at") @db.Timestamptz(3)
+  lastSeenAt        DateTime         @default(now()) @map("last_seen_at") @db.Timestamptz(3)
+  version           Int              @default(1)
+  createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  commits      RepositoryCommit[]
+  artifacts    PocArtifact[]
+  associations PocAssociation[]
+  references   PocReference[]
+
+  @@unique([source, externalId])
+  @@index([fullNameKey])
+  @@index([ownerId])
+  @@index([inspectionDueAt])
+  @@index([firstDiscoveredAt])
+  @@map("poc_repositories")
+}
+
+/// Head commits observed over time (commit identifier tracking).
+model RepositoryCommit {
+  id           String        @id @default(uuid()) @db.Uuid
+  repositoryId String        @map("repository_id") @db.Uuid
+  repository   PocRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  sha          String        @db.Char(40)
+  treeSha      String        @map("tree_sha") @db.Char(40)
+  /// Committer date reported by the source; set by the committer and not trustworthy.
+  committedAt  DateTime?     @map("committed_at") @db.Timestamptz(3)
+  observedAt   DateTime      @default(now()) @map("observed_at") @db.Timestamptz(3)
+  artifactId   String?       @map("artifact_id") @db.Uuid
+  artifact     PocArtifact?  @relation(fields: [artifactId], references: [id], onDelete: SetNull)
+
+  @@unique([repositoryId, sha])
+  @@index([repositoryId, observedAt])
+  @@map("repository_commits")
+}
+
+/// One repository snapshot (a distinct Git tree). New content means a new, unverified artifact.
+model PocArtifact {
+  id                    String             @id @default(uuid()) @db.Uuid
+  repositoryId          String             @map("repository_id") @db.Uuid
+  repository            PocRepository      @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  commitSha             String             @map("commit_sha") @db.Char(40)
+  treeSha               String             @map("tree_sha") @db.Char(40)
+  fingerprint           String             @db.Char(64)
+  fileCount             Int                @map("file_count")
+  totalBytes            BigInt             @map("total_bytes")
+  listingTruncated      Boolean            @map("listing_truncated")
+  hasSourceCode         Boolean            @map("has_source_code")
+  riskIndicators        String[]           @map("risk_indicators")
+  duplicateKind         DuplicateKind?     @map("duplicate_kind")
+  duplicateOfId         String?            @map("duplicate_of_id") @db.Uuid
+  duplicateOf           PocArtifact?       @relation("ArtifactDuplicates", fields: [duplicateOfId], references: [id], onDelete: SetNull)
+  duplicates            PocArtifact[]      @relation("ArtifactDuplicates")
+  similarity            Decimal?           @db.Decimal(4, 3)
+  verificationStatus    VerificationStatus @default(unverified) @map("verification_status")
+  verificationUpdatedAt DateTime?          @map("verification_updated_at") @db.Timestamptz(3)
+  verificationUpdatedBy String?            @map("verification_updated_by") @db.VarChar(255)
+  discoveredAt          DateTime           @default(now()) @map("discovered_at") @db.Timestamptz(3)
+  version               Int                @default(1)
+
+  files              ArtifactFile[]
+  verificationEvents ArtifactVerificationEvent[]
+  commits            RepositoryCommit[]
+
+  @@unique([repositoryId, treeSha])
+  @@index([treeSha])
+  @@index([fingerprint])
+  @@index([verificationStatus])
+  @@index([discoveredAt])
+  @@map("poc_artifacts")
+}
+
+/// File listing of an artifact (names, modes and blob IDs only; never contents).
+model ArtifactFile {
+  id          String      @id @default(uuid()) @db.Uuid
+  artifactId  String      @map("artifact_id") @db.Uuid
+  artifact    PocArtifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  /// Untrusted path inside the repository; never used as a filesystem path or object key.
+  path        String      @db.VarChar(1024)
+  blobSha     String      @map("blob_sha") @db.Char(40)
+  sizeBytes   Int?        @map("size_bytes")
+  category    String      @db.VarChar(16)
+  /// False for boilerplate (licences, empty files) excluded from near-duplicate detection.
+  significant Boolean
+
+  @@index([artifactId])
+  @@index([blobSha])
+  @@map("artifact_files")
+}
+
+/// Append-only history of verification decisions.
+model ArtifactVerificationEvent {
+  id            String             @id @default(uuid()) @db.Uuid
+  artifactId    String             @map("artifact_id") @db.Uuid
+  artifact      PocArtifact        @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  fromStatus    VerificationStatus @map("from_status")
+  toStatus      VerificationStatus @map("to_status")
+  reason        String             @db.VarChar(2000)
+  actorId       String             @map("actor_id") @db.VarChar(255)
+  actorUsername String?            @map("actor_username") @db.VarChar(255)
+  correlationId String?            @map("correlation_id") @db.VarChar(128)
+  createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([artifactId, createdAt])
+  @@map("artifact_verification_events")
+}
+
+/// Scored association of a repository with a CVE.
+model PocAssociation {
+  id                String                  @id @default(uuid()) @db.Uuid
+  repositoryId      String                  @map("repository_id") @db.Uuid
+  repository        PocRepository           @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  cveId             String                  @map("cve_id") @db.VarChar(32)
+  confidence        Decimal                 @db.Decimal(4, 3)
+  confidenceLevel   ConfidenceLevel         @map("confidence_level")
+  /// Signals and penalties behind the score (see the scoring model in docs/poc-service.md).
+  signals           Json
+  penalties         Json
+  scoringVersion    Int                     @map("scoring_version")
+  origin            AssociationOrigin
+  /// Persisted evidence: the connector's search returned the repository for this CVE.
+  searchMatchedAt   DateTime?               @map("search_matched_at") @db.Timestamptz(3)
+  /// Persisted evidence: an analyst created the association.
+  manual            Boolean                 @default(false)
+  reviewStatus      AssociationReviewStatus @default(candidate) @map("review_status")
+  reviewedBy        String?                 @map("reviewed_by") @db.VarChar(255)
+  reviewedAt        DateTime?               @map("reviewed_at") @db.Timestamptz(3)
+  reviewNote        String?                 @map("review_note") @db.VarChar(2000)
+  firstDiscoveredAt DateTime                @default(now()) @map("first_discovered_at") @db.Timestamptz(3)
+  lastEvaluatedAt   DateTime                @default(now()) @map("last_evaluated_at") @db.Timestamptz(3)
+  version           Int                     @default(1)
+
+  @@unique([repositoryId, cveId])
+  @@index([cveId, confidence])
+  @@index([reviewStatus])
+  @@map("poc_cve_associations")
+}
+
+/// Public PoC references listed by CVE records (from Intelligence Service observations).
+model PocReference {
+  id              String         @id @default(uuid()) @db.Uuid
+  cveId           String         @map("cve_id") @db.VarChar(32)
+  url             String         @db.VarChar(2048)
+  /// SHA-256 of the URL (unique key; URLs are too long for a B-tree index).
+  urlHash         String         @map("url_hash") @db.Char(64)
+  kind            ReferenceKind
+  /// Intelligence source whose record lists the reference.
+  source          String         @db.VarChar(128)
+  tags            String[]
+  /// Lower-case `owner/name` for GitHub repository references.
+  repositoryKey   String?        @map("repository_key") @db.VarChar(200)
+  repositoryId    String?        @map("repository_id") @db.Uuid
+  repository      PocRepository? @relation(fields: [repositoryId], references: [id], onDelete: SetNull)
+  /// Last time the repository lookup was queued (for unresolved GitHub references).
+  resolveQueuedAt DateTime?      @map("resolve_queued_at") @db.Timestamptz(3)
+  removedAt       DateTime?      @map("removed_at") @db.Timestamptz(3)
+  firstSeenAt     DateTime       @default(now()) @map("first_seen_at") @db.Timestamptz(3)
+  lastSeenAt      DateTime       @default(now()) @map("last_seen_at") @db.Timestamptz(3)
+
+  @@unique([cveId, source, urlHash])
+  @@index([repositoryKey])
+  @@index([repositoryId])
+  @@map("poc_references")
+}
+
+/// Last applied observation revision per Intelligence Service source item.
+model ObservationCursor {
+  id             String   @id @default(uuid()) @db.Uuid
+  source         String   @db.VarChar(64)
+  sourceRecordId String   @map("source_record_id") @db.VarChar(128)
+  cveId          String   @map("cve_id") @db.VarChar(32)
+  revision       Int
+  appliedAt      DateTime @default(now()) @map("applied_at") @db.Timestamptz(3)
+
+  @@unique([source, sourceRecordId])
+  @@map("observation_cursors")
+}
+
+/// Local projection of CVE records (from `cve.record.*`), used to schedule discovery.
+model TrackedCve {
+  cveId           String    @id @map("cve_id") @db.VarChar(32)
+  recordId        String    @map("record_id") @db.Uuid
+  recordVersion   Int       @map("record_version")
+  state           String    @db.VarChar(16)
+  inKev           Boolean   @map("in_kev")
+  epssScore       Decimal?  @map("epss_score") @db.Decimal(6, 5)
+  publishedAt     DateTime? @map("published_at") @db.Timestamptz(3)
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz(3)
+  eventOccurredAt DateTime  @map("event_occurred_at") @db.Timestamptz(3)
+  nextScanAt      DateTime? @map("next_scan_at") @db.Timestamptz(3)
+  lastScannedAt   DateTime? @map("last_scanned_at") @db.Timestamptz(3)
+  scanCount       Int       @default(0) @map("scan_count")
+
+  @@index([nextScanAt])
+  @@map("tracked_cves")
+}
+
+/// Discovery log: one row per job attempt.
+model DiscoveryRun {
+  id            String             @id @default(uuid()) @db.Uuid
+  connector     String             @db.VarChar(32)
+  mode          String             @db.VarChar(16)
+  trigger       String             @db.VarChar(16)
+  status        DiscoveryRunStatus @default(running)
+  cveId         String?            @map("cve_id") @db.VarChar(32)
+  repositoryId  String?            @map("repository_id") @db.Uuid
+  jobId         String?            @map("job_id") @db.VarChar(128)
+  attempt       Int                @default(1)
+  requestedBy   String?            @map("requested_by") @db.VarChar(255)
+  correlationId String?            @map("correlation_id") @db.VarChar(128)
+  startedAt     DateTime           @default(now()) @map("started_at") @db.Timestamptz(3)
+  finishedAt    DateTime?          @map("finished_at") @db.Timestamptz(3)
+  stats         Json
+  error         String?            @db.VarChar(2000)
+
+  @@index([startedAt])
+  @@index([connector, mode, startedAt])
+  @@index([status, startedAt])
+  @@index([cveId])
+  @@map("discovery_runs")
+}
+
+/// Incremental state per connector (e.g. the `pushed` window of the recent sweep).
+model ConnectorState {
+  connector String   @id @db.VarChar(32)
+  cursor    Json
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("connector_states")
+}
+
+/// Inbox for duplicate suppression of consumed events.
+model ProcessedEvent {
+  id          String   @id @default(uuid()) @db.Uuid
+  consumer    String   @db.VarChar(64)
+  eventId     String   @map("event_id") @db.Uuid
+  processedAt DateTime @default(now()) @map("processed_at") @db.Timestamptz(3)
+
+  @@unique([consumer, eventId])
+  @@index([processedAt])
+  @@map("processed_events")
+}
+
+/// Transactional outbox for domain events (published by OutboxRelay).
+model OutboxEvent {
+  id            String    @id @default(uuid()) @db.Uuid
+  eventId       String    @unique @map("event_id") @db.Uuid
+  eventType     String    @map("event_type") @db.VarChar(128)
+  envelope      Json
+  attempts      Int       @default(0)
+  lastError     String?   @map("last_error") @db.VarChar(2000)
+  nextAttemptAt DateTime  @default(now()) @map("next_attempt_at") @db.Timestamptz(3)
+  lockedUntil   DateTime? @map("locked_until") @db.Timestamptz(3)
+  publishedAt   DateTime? @map("published_at") @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([publishedAt, nextAttemptAt])
+  @@map("outbox_events")
+}

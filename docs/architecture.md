@@ -124,6 +124,10 @@ service validates Keycloak access tokens itself with `@cve/auth` (zero trust bet
 services), routes are private by default, and permissions are derived from roles by a static mapping
 in `@cve/contracts`.
 
+The PoC Service (Phase 5, [poc-service.md](poc-service.md)) stores repository metadata and file
+listings only: it never fetches file contents, clones or archives, scores CVE associations instead of
+trusting repository text, and hides artifacts judged malicious from users without `quarantine:read`.
+
 The following are specified in `CLAUDE.md` and are deliberately not implemented yet: web login, download hardening and
 quarantine (Phase 6), TLS termination, metrics and backups (Phase 10). Downloaded PoC content will
 never be executed or automatically extracted.

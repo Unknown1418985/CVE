@@ -1,0 +1,71 @@
+import { domainEventEnvelopeSchema } from '@cve/contracts';
+import type { OutboxRecord, OutboxStore } from '@cve/messaging';
+
+import type { PrismaClient } from '../generated/prisma/client.js';
+
+interface ClaimedRow {
+  id: string;
+  envelope: unknown;
+  attempts: number;
+}
+
+/**
+ * Outbox persistence on the PoC Service database. `claimDue` leases rows with
+ * `FOR UPDATE SKIP LOCKED`, so several replicas can relay concurrently without duplicates.
+ */
+export class PrismaOutboxStore implements OutboxStore {
+  constructor(
+    private readonly prisma: PrismaClient,
+    private readonly leaseMs = 60_000,
+  ) {}
+
+  async claimDue(limit: number, now: Date): Promise<readonly OutboxRecord[]> {
+    const leaseUntil = new Date(now.getTime() + this.leaseMs);
+    const rows = await this.prisma.$queryRaw<ClaimedRow[]>`
+      UPDATE "outbox_events" AS o
+         SET "locked_until" = ${leaseUntil}
+       WHERE o."id" IN (
+             SELECT "id" FROM "outbox_events"
+              WHERE "published_at" IS NULL
+                AND "next_attempt_at" <= ${now}
+                AND ("locked_until" IS NULL OR "locked_until" <= ${now})
+              ORDER BY "created_at"
+              LIMIT ${limit}
+                FOR UPDATE SKIP LOCKED)
+   RETURNING o."id", o."envelope", o."attempts"`;
+    const records: OutboxRecord[] = [];
+    for (const row of rows) {
+      const event = domainEventEnvelopeSchema.safeParse(row.envelope);
+      if (!event.success) {
+        // A row that can never be published must not block the relay; park it far in the future.
+        await this.markFailed(
+          row.id,
+          'invalid envelope',
+          new Date(now.getTime() + 365 * 86_400_000),
+        );
+        continue;
+      }
+      records.push({ id: row.id, event: event.data, attempts: row.attempts });
+    }
+    return records;
+  }
+
+  async markPublished(id: string, publishedAt: Date): Promise<void> {
+    await this.prisma.outboxEvent.update({
+      where: { id },
+      data: { publishedAt, lockedUntil: null },
+    });
+  }
+
+  async markFailed(id: string, error: string, nextAttemptAt: Date): Promise<void> {
+    await this.prisma.outboxEvent.update({
+      where: { id },
+      data: {
+        attempts: { increment: 1 },
+        lastError: error.slice(0, 2000),
+        nextAttemptAt,
+        lockedUntil: null,
+      },
+    });
+  }
+}
