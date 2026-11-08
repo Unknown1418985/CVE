@@ -12,3 +12,4 @@ export * from './intelligence/index.js';
 export * from './asset/index.js';
 export * from './poc/index.js';
 export * from './download/index.js';
+export * from './exploit/index.js';

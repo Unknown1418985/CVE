@@ -1,3 +1,5 @@
+import { resolve } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import { EnvValidationError } from '@cve/config';
@@ -89,7 +91,10 @@ describe('download-service environment', () => {
     );
   });
 
-  it('requires absolute scanner paths', () => {
-    expect(() => downloadTestEnv({ YARA_RULES_PATH: 'rules.yar' })).toThrow(/absolute path/);
+  it('requires an absolute scanner binary and resolves a relative rules path', () => {
+    expect(() => downloadTestEnv({ YARA_BINARY: 'yara' })).toThrow(/absolute path/);
+    expect(downloadTestEnv({ YARA_RULES_PATH: 'rules.yar' }).YARA_RULES_PATH).toBe(
+      resolve('rules.yar'),
+    );
   });
 });
