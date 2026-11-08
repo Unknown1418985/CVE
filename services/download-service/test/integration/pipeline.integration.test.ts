@@ -264,7 +264,9 @@ describe('automatic downloads from PoC Service events', () => {
     const clamav = await prisma.scanResult.findFirst({
       where: { artifactId: artifact.id, scanner: 'clamav' },
     });
-    expect(JSON.stringify(clamav?.findings)).toContain('Synthetic-EICAR');
+    // ClamAV names its built-in EICAR detection `Eicar-Signature`; signature databases may
+    // report it as `Win.Test.EICAR_HDB-1`. Either way the finding must name EICAR.
+    expect(JSON.stringify(clamav?.findings)).toMatch(/eicar/i);
 
     const res = await app.http
       .post(`/api/v1/download-artifacts/${artifact.id}/lifecycle`)
