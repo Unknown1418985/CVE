@@ -60,9 +60,27 @@ describe.runIf(fullStack)('full stack through Nginx', () => {
   });
 
   it('serves the web application', async () => {
-    const res = await fetch(`${nginx}/`);
+    const res = await fetch(`${nginx}/signed-out`);
     expect(res.status).toBe(200);
     expect(res.headers.get('content-security-policy')).toContain("frame-ancestors 'none'");
+  });
+
+  it('sends visitors without a session through the Keycloak sign-in of the cve-web client', async () => {
+    const home = await fetch(`${nginx}/`, { redirect: 'manual' });
+    expect(home.status).toBe(307);
+    expect(home.headers.get('location')).toContain('/session/login?returnTo=%2F');
+
+    const login = await fetch(`${nginx}/session/login`, { redirect: 'manual' });
+    expect(login.status).toBe(303);
+    const authorize = new URL(login.headers.get('location') ?? '');
+    expect(authorize.pathname).toBe('/auth/realms/cve-platform/protocol/openid-connect/auth');
+    expect(authorize.searchParams.get('client_id')).toBe('cve-web');
+    expect(authorize.searchParams.get('code_challenge_method')).toBe('S256');
+    // Keycloak answers 400 instead of its login page when the redirect URI is not registered.
+    const page = await fetch(`${nginx}${authorize.pathname}${authorize.search}`, {
+      redirect: 'manual',
+    });
+    expect(page.status).toBe(200);
   });
 
   it('exposes Keycloak realm endpoints under /auth but not the admin console', async () => {

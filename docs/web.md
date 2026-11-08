@@ -104,8 +104,9 @@ shared reports will appear once the Reporting Service ships them.
 | `API_PROXY_TIMEOUT_MS`     | no       | `20000`                      | Gateway request timeout for proxied calls.                |
 | `LOG_LEVEL`                | no       | `info`                       | Pino log level.                                           |
 
-`pnpm env:generate` writes `apps/web/.env` for `pnpm dev` (port 3000). `compose.dev.yaml` sets
-the `cve-web` client's origin to `http://localhost:3000` for that setup. Keycloak only imports
+`pnpm env:generate` writes `apps/web/.env` for `pnpm dev` (port 3000). `compose.dev.yaml` adds
+`http://localhost:3000` (`KEYCLOAK_WEB_DEV_ORIGIN`) to the `cve-web` client next to
+`PUBLIC_ORIGIN`, so the same realm serves `pnpm dev` and the stack behind Nginx. Keycloak only imports
 the realm on first start, so an existing Keycloak volume keeps the previous redirect URIs:
 recreate it (`docker compose down -v keycloak-db`) or add the URI in the admin console.
 

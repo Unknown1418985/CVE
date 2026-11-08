@@ -417,6 +417,8 @@ services:
       KC_LOG_CONSOLE_OUTPUT: json
       # Substituted into infra/keycloak/import/cve-platform-realm.json on first import.
       KEYCLOAK_WEB_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost:8080}
+      # Second allowed cve-web origin; compose.dev.yaml points it at `pnpm dev` (:3000).
+      KEYCLOAK_WEB_DEV_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost:8080}
       KEYCLOAK_API_CLIENT_SECRET: ${KEYCLOAK_API_CLIENT_SECRET:?required}
       KEYCLOAK_IDENTITY_SERVICE_CLIENT_SECRET: ${KEYCLOAK_IDENTITY_SERVICE_CLIENT_SECRET:?required}
     volumes:
