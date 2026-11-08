@@ -96,7 +96,10 @@ describe.runIf(fullStack)('full stack through Nginx', () => {
   });
 
   it('keeps metrics off the public API', async () => {
-    expect((await fetch(`${nginx}/metrics`)).status).not.toBe(200);
+    // `/metrics` reaches the web app, which sends visitors without a session to sign in.
+    const metrics = await fetch(`${nginx}/metrics`, { redirect: 'manual' });
+    expect(metrics.status).not.toBe(200);
+    expect(await metrics.text()).not.toContain('# TYPE');
     expect((await fetch(`${nginx}/api/v1/metrics`)).status).toBe(404);
   });
 });
