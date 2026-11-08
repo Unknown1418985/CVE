@@ -121,7 +121,9 @@ describe('failed job recovery', () => {
   it('abandons runs whose worker died, publishes the failure and queues a recovery run', async () => {
     const env = intelligenceTestEnv(mock);
     const engine = testEngine(repository, env);
-    const now = new Date('2026-11-04T12:00:00.000Z');
+    // Relative to the real clock: the recovery run below resumes only within the resume window.
+    const now = new Date();
+    const crashedAt = new Date(now.getTime() - 60 * 60_000);
     const crashed = await repository.createRun({
       source: 'nvd',
       trigger: 'scheduled',
@@ -129,9 +131,9 @@ describe('failed job recovery', () => {
       attempt: 1,
       requestedBy: null,
       resumedFromRunId: null,
-      startedAt: new Date('2026-11-04T11:00:00.000Z'),
+      startedAt: crashedAt,
       cursorBefore: null,
-      checkpoint: { windowStart: null, runEnd: '2026-11-04T11:00:00.000Z', startIndex: 1 },
+      checkpoint: { windowStart: null, runEnd: crashedAt.toISOString(), startIndex: 1 },
     });
     const enqueue = vi.fn(() => Promise.resolve());
     const result = await runMaintenance({
