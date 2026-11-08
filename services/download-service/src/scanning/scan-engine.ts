@@ -25,6 +25,7 @@ import {
 import { downloadEvent, systemContext } from '../events/download-events.js';
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { toJson, TX_OPTIONS, writeOutbox } from '../persistence/database.js';
+import { recordScan } from '../common/metrics.js';
 import { SCAN_STATUS_TO_API, SCAN_STATUS_TO_DB, VERDICT_TO_DB } from '../persistence/enums.js';
 import type { ArtifactObjectStore } from '../storage/object-store.js';
 import type { FileScanner, ScannerResult } from './clamav.js';
@@ -190,6 +191,10 @@ export class ScanEngine {
     }, TX_OPTIONS);
     if (change === null) return { status: 'skipped', reason: 'the artifact was removed' };
     await deleteReleasedCopies(this.options.store, prisma, [change.releasedKeyToDelete], log);
+    recordScan(
+      finalStatus,
+      runs.map((run) => ({ scanner: run.scanner, verdict: run.result.verdict })),
+    );
     const scannerErrors = runs.some((run) => run.result.verdict === 'error');
     log.info({ scanStatus: finalStatus, scanRunId, scannerErrors }, 'artifact scanned');
     return { status: 'scanned', scanStatus: finalStatus, scannerErrors };

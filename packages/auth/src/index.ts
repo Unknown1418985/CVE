@@ -10,3 +10,4 @@ export * from './nest/authentication.guard.js';
 export * from './nest/authorization.guard.js';
 export * from './nest/decorators.js';
 export * from './nest/request-principal.js';
+export * from './metrics.js';

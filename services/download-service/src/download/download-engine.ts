@@ -21,6 +21,7 @@ import {
   quarantineKey,
 } from '../domain/naming.js';
 import type { SourcePolicy } from '../domain/sources.js';
+import { recordDownloadAttempt, recordDownloadedBytes } from '../common/metrics.js';
 import { downloadEvent, systemContext } from '../events/download-events.js';
 import type { DownloadRequest, PrismaClient } from '../generated/prisma/client.js';
 import {
@@ -159,6 +160,8 @@ export class DownloadEngine {
         { status: outcome.status, artifactId: outcome.artifactId, bytes: result.bytes },
         'download finished',
       );
+      recordDownloadAttempt(request.source, outcome.status);
+      recordDownloadedBytes(request.source, result.bytes);
       return outcome;
     } catch (error) {
       const failure =
@@ -174,8 +177,9 @@ export class DownloadEngine {
       const willRetry = failure.retryable && context.attempt < context.maxAttempts;
       await this.recordFailure(request, attempt.id, failure, willRetry, started);
       log.warn({ err: failure, code: failure.code, willRetry }, 'download attempt failed');
-      if (willRetry) return { status: 'retry', error: failure };
-      return { status: failure.outcome === 'rejected' ? 'rejected' : 'failed', error: failure };
+      const status = willRetry ? 'retry' : failure.outcome === 'rejected' ? 'rejected' : 'failed';
+      recordDownloadAttempt(request.source, status, failure.code);
+      return { status, error: failure };
     } finally {
       await rm(staging, { force: true });
     }

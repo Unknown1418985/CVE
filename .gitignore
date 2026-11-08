@@ -22,3 +22,7 @@ dump.rdb
 # Playwright
 apps/web/test-results/
 apps/web/playwright-report/
+
+# Backups (infra/backup) and production deployment artifacts
+/backups/
+/acme-webroot/

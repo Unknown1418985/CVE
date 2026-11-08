@@ -2,6 +2,7 @@ import type { DomainEventEnvelope } from '@cve/contracts';
 import type { Logger } from '@cve/logger';
 
 import { errorMessage } from './errors.js';
+import { outboxRelayed, registerOutboxBacklogSource, type OutboxBacklog } from './metrics.js';
 
 /** An event written in the same database transaction as the state change that caused it. */
 export interface OutboxRecord {
@@ -23,6 +24,8 @@ export interface OutboxStore {
   claimDue(limit: number, now: Date): Promise<readonly OutboxRecord[]>;
   markPublished(id: string, publishedAt: Date): Promise<void>;
   markFailed(id: string, error: string, nextAttemptAt: Date): Promise<void>;
+  /** Backlog size for monitoring (`outbox_pending_events`); optional for test stores. */
+  backlog?(now: Date): Promise<OutboxBacklog>;
 }
 
 export interface OutboxPublisher {
@@ -58,6 +61,7 @@ export class OutboxRelay {
   private timer: NodeJS.Timeout | undefined;
   private running: Promise<OutboxRunResult> | undefined;
   private stopped = true;
+  private unregisterBacklog: (() => void) | undefined;
 
   constructor(private readonly options: OutboxRelayOptions) {}
 
@@ -77,8 +81,10 @@ export class OutboxRelay {
         await publisher.publish(record.event);
         await store.markPublished(record.id, this.now());
         published += 1;
+        outboxRelayed().inc({ outcome: 'published' });
       } catch (error) {
         failed += 1;
+        outboxRelayed().inc({ outcome: 'failed' });
         const delay = outboxRetryDelayMs(record.attempts, baseMs, maxMs);
         logger.error(
           {
@@ -103,6 +109,11 @@ export class OutboxRelay {
   start(): void {
     if (!this.stopped) return;
     this.stopped = false;
+    const { store } = this.options;
+    if (store.backlog) {
+      const backlog = store.backlog.bind(store);
+      this.unregisterBacklog = registerOutboxBacklogSource(() => backlog(this.now()));
+    }
     this.schedule(0);
   }
 
@@ -125,6 +136,8 @@ export class OutboxRelay {
 
   async stop(): Promise<void> {
     this.stopped = true;
+    this.unregisterBacklog?.();
+    this.unregisterBacklog = undefined;
     if (this.timer) clearTimeout(this.timer);
     await this.running?.catch(() => undefined);
   }

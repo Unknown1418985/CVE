@@ -6,6 +6,7 @@ import { Controller, Get, Module } from '@nestjs/common';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createLogger } from '@cve/logger';
+import { platformRegistry } from '@cve/metrics';
 import { configureServiceApp, Public } from '@cve/shared';
 import { createHttpTestApp, type HttpTestApp } from '@cve/testing';
 import { createTestTokenIssuer, type TestTokenIssuer } from '@cve/testing/auth';
@@ -180,5 +181,14 @@ describe('authentication and authorization guards', () => {
     revoked.add(sid);
     await t.http.get('/api/v1/probe/private').set(bearer(token)).expect(401);
     expect(failed.map((event) => event.reason)).toContain('session-inactive');
+  });
+
+  it('counts rejections by reason for monitoring', async () => {
+    await t.http.get('/api/v1/probe/private').expect(401);
+    const viewer = await issuer.tokenFor(randomUUID(), ['viewer']);
+    await t.http.get('/api/v1/probe/audit').set(bearer(viewer)).expect(403);
+    const text = await platformRegistry.getSingleMetricAsString('auth_requests_rejected_total');
+    expect(text).toMatch(/auth_requests_rejected_total\{reason="missing-token"\} [1-9]/);
+    expect(text).toMatch(/auth_requests_rejected_total\{reason="forbidden"\} [1-9]/);
   });
 });

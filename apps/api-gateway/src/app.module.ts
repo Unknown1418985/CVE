@@ -2,11 +2,18 @@ import { Module, type DynamicModule } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule } from '@nestjs/throttler';
 
-import { authGuards, AuthModule, type SessionChecker, type TokenVerifier } from '@cve/auth';
+import {
+  authGuards,
+  AuthModule,
+  keycloakRealmUrls,
+  type SessionChecker,
+  type TokenVerifier,
+} from '@cve/auth';
 import { createLogger, type Logger } from '@cve/logger';
 import { HealthModule } from '@cve/shared';
 
 import { createGatewayAuth } from './auth/gateway-auth.js';
+import { createKeycloakHealthIndicator } from './auth/keycloak-health.js';
 import { UserThrottlerGuard } from './auth/user-throttler.guard.js';
 import { serviceRegistryFromEnv, type Env } from './config/env.js';
 import { AssetProxyController } from './proxy/asset-proxy.controller.js';
@@ -77,7 +84,12 @@ export class AppModule {
           service: SERVICE_NAME,
           version: SERVICE_VERSION,
           timeoutMs: env.HEALTH_CHECK_TIMEOUT_MS,
-          indicators: [],
+          indicators: [
+            createKeycloakHealthIndicator(
+              keycloakRealmUrls(env.KEYCLOAK_URL, env.KEYCLOAK_REALM).jwks,
+              fetchFn,
+            ),
+          ],
         }),
         ServicesHealthModule.register({
           registry,

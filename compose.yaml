@@ -995,6 +995,7 @@ services:
     <<: [*hardening, *logging]
     volumes:
       - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infra/nginx/snippets:/etc/nginx/platform/snippets:ro
     ports:
       - '127.0.0.1:8080:8080'
     networks: [public, frontend, observability]
@@ -1046,6 +1047,43 @@ services:
           cpus: '0.50'
           memory: 512M
           pids: 256
+
+  alertmanager:
+    profiles: [observability]
+    image: prom/alertmanager:v0.28.1
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    <<: [*hardening, *logging]
+    # The receiver URL usually embeds a token: it comes from .env and is written to a private
+    # tmpfs file that alertmanager.yml reads (url_file), so it never appears in the config.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        umask 077 && mkdir -p /tmp/alertmanager &&
+        printf '%s' "$$ALERTMANAGER_WEBHOOK_URL" > /tmp/alertmanager/webhook-url &&
+        unset ALERTMANAGER_WEBHOOK_URL &&
+        exec /bin/alertmanager --config.file=/etc/alertmanager/alertmanager.yml
+        --storage.path=/alertmanager --web.listen-address=:9093
+    environment:
+      ALERTMANAGER_WEBHOOK_URL: ${ALERTMANAGER_WEBHOOK_URL:-}
+    volumes:
+      - ./infra/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    networks: [observability]
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:9093/-/ready']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+          pids: 64
 
   grafana:
     profiles: [observability]
@@ -1186,4 +1224,5 @@ volumes:
   minio-data:
   clamav-data:
   prometheus-data:
+  alertmanager-data:
   grafana-data:
