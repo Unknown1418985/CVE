@@ -85,7 +85,12 @@ export function useCancelDownload() {
 export function useChangeLifecycle() {
   return useApiMutation({
     schema: dataSchema(downloadArtifactSchema),
-    request: (input: { id: string; version: number; status: ArtifactLifecycleStatus; reason: string }) => ({
+    request: (input: {
+      id: string;
+      version: number;
+      status: ArtifactLifecycleStatus;
+      reason: string;
+    }) => ({
       path: apiPath('download-artifacts', input.id, 'lifecycle'),
       method: 'POST',
       body: { status: input.status, reason: input.reason },
@@ -108,7 +113,9 @@ export function useRescanArtifact() {
     }),
     invalidate: INVALIDATE_ARTIFACTS,
     onSuccess: (data) => {
-      toast.success(data.data.queued ? 'Rescan queued' : 'A scan is already queued for this artifact');
+      toast.success(
+        data.data.queued ? 'Rescan queued' : 'A scan is already queued for this artifact',
+      );
     },
   });
 }

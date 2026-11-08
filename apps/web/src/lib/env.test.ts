@@ -37,7 +37,10 @@ describe('parseServerEnv', () => {
 
   it('rejects non-http URLs', () => {
     expect(() =>
-      parseServerEnv({ WEB_SESSION_SECRET: SECRET, API_GATEWAY_INTERNAL_URL: 'file:///etc/passwd' }),
+      parseServerEnv({
+        WEB_SESSION_SECRET: SECRET,
+        API_GATEWAY_INTERNAL_URL: 'file:///etc/passwd',
+      }),
     ).toThrow(/API_GATEWAY_INTERNAL_URL/);
   });
 

@@ -12,7 +12,11 @@ import { cn } from '@/lib/utils';
 
 const GROUPS: readonly NavigationItem['group'][] = ['Intelligence', 'Operations', 'Administration'];
 
-export function SidebarNav({ onNavigate }: { onNavigate?: (() => void) | undefined }): ReactElement {
+export function SidebarNav({
+  onNavigate,
+}: {
+  onNavigate?: (() => void) | undefined;
+}): ReactElement {
   const pathname = usePathname();
   const me = useMe();
   const permissions = me.data === undefined ? undefined : new Set(me.data.data.permissions);
@@ -25,7 +29,9 @@ export function SidebarNav({ onNavigate }: { onNavigate?: (() => void) | undefin
         if (groupItems.length === 0) return null;
         return (
           <div key={group}>
-            <p className="px-3 pb-1.5 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">{group}</p>
+            <p className="px-3 pb-1.5 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
+              {group}
+            </p>
             <ul className="flex flex-col gap-0.5">
               {groupItems.map((item) => {
                 const active = isActiveSection(item.href, pathname);

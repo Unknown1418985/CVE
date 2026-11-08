@@ -5,7 +5,13 @@ import type { ReactElement, ReactNode } from 'react';
 
 export const TooltipProvider = TooltipPrimitive.Provider;
 
-export function Tooltip({ content, children }: { content: ReactNode; children: ReactNode }): ReactElement {
+export function Tooltip({
+  content,
+  children,
+}: {
+  content: ReactNode;
+  children: ReactNode;
+}): ReactElement {
   return (
     <TooltipPrimitive.Root>
       <TooltipPrimitive.Trigger asChild>{children}</TooltipPrimitive.Trigger>

@@ -13,7 +13,13 @@ import { apiPath, dataSchema, pageSchema, type QueryParams } from '@/lib/api/cli
 import { useApiQuery } from '@/lib/api/hooks';
 
 export function useVendors(query: QueryParams, enabled = true) {
-  return useApiQuery({ path: 'vendors', schema: pageSchema(vendorSchema), query, enabled, keepPrevious: true });
+  return useApiQuery({
+    path: 'vendors',
+    schema: pageSchema(vendorSchema),
+    query,
+    enabled,
+    keepPrevious: true,
+  });
 }
 
 export function useVendor(vendorId: string) {

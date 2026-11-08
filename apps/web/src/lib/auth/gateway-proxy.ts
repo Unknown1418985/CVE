@@ -136,12 +136,22 @@ export async function forwardToGateway(
   }
   const fresh = await ensureFreshSession(env, stored);
   if (fresh === 'expired') {
-    const response = errorResponse(401, 'session_expired', 'Your session has expired', correlationId);
+    const response = errorResponse(
+      401,
+      'session_expired',
+      'Your session has expired',
+      correlationId,
+    );
     clearSession(env, response.cookies);
     return response;
   }
   if (fresh === 'unavailable') {
-    return errorResponse(503, 'identity_unavailable', 'The identity provider is unavailable', correlationId);
+    return errorResponse(
+      503,
+      'identity_unavailable',
+      'The identity provider is unavailable',
+      correlationId,
+    );
   }
 
   const headers = new Headers({
@@ -160,7 +170,12 @@ export async function forwardToGateway(
     const text = await request.text();
     if (text.length > 0) {
       if (!contentType?.toLowerCase().startsWith('application/json')) {
-        return errorResponse(415, 'unsupported_media_type', 'Only JSON bodies are accepted', correlationId);
+        return errorResponse(
+          415,
+          'unsupported_media_type',
+          'Only JSON bodies are accepted',
+          correlationId,
+        );
       }
       if (Buffer.byteLength(text) > MAX_BODY_BYTES) {
         return errorResponse(413, 'payload_too_large', 'Request body is too large', correlationId);
@@ -209,7 +224,8 @@ export async function forwardToGateway(
     const disposition = upstream.headers.get('content-disposition');
     responseHeaders.set(
       'content-disposition',
-      disposition !== null && /^attachment; filename="artifact-[0-9a-f-]{36}(\.[a-z0-9.]{1,12})?"$/.test(disposition)
+      disposition !== null &&
+        /^attachment; filename="artifact-[0-9a-f-]{36}(\.[a-z0-9.]{1,12})?"$/.test(disposition)
         ? disposition
         : 'attachment; filename="artifact.bin"',
     );

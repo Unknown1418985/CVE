@@ -45,7 +45,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const code = params.get('code');
   const state = params.get('state');
   if (transaction === null || code === null || state === null || state !== transaction.state) {
-    logger.warn({ event: 'oidc.callback.invalid-state' }, 'sign-in callback without a matching transaction');
+    logger.warn(
+      { event: 'oidc.callback.invalid-state' },
+      'sign-in callback without a matching transaction',
+    );
     return fail(env, FAILURES.state);
   }
 
@@ -67,7 +70,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   } catch (error) {
     const unavailable = error instanceof OidcError && !error.invalidGrant;
     logger.error(
-      { event: 'oidc.callback.exchange-failed', error: error instanceof Error ? error.message : 'unknown' },
+      {
+        event: 'oidc.callback.exchange-failed',
+        error: error instanceof Error ? error.message : 'unknown',
+      },
       'authorization code exchange failed',
     );
     return fail(env, unavailable ? FAILURES.unavailable : FAILURES.exchange);

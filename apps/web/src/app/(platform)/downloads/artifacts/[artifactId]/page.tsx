@@ -7,7 +7,9 @@ import { isUuid } from '@/lib/ids';
 
 export const metadata: Metadata = { title: 'Stored Artifact' };
 
-export default async function DownloadArtifactPage({ params }: PageProps<'/downloads/artifacts/[artifactId]'>): Promise<ReactElement> {
+export default async function DownloadArtifactPage({
+  params,
+}: PageProps<'/downloads/artifacts/[artifactId]'>): Promise<ReactElement> {
   const { artifactId } = await params;
   if (!isUuid(artifactId)) notFound();
   return <DownloadArtifactDetailView artifactId={artifactId} />;

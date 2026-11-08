@@ -52,14 +52,24 @@ describe('toCsv', () => {
 
 describe('toJson', () => {
   it('keeps types and adds metadata', () => {
-    const parsed = JSON.parse(toJson([{ id: 'x', score: null, tags: ['t'] }], columns, { report: 'Test' })) as unknown;
-    expect(parsed).toEqual({ report: 'Test', rowCount: 1, data: [{ ID: 'x', Score: null, Tags: ['t'] }] });
+    const parsed = JSON.parse(
+      toJson([{ id: 'x', score: null, tags: ['t'] }], columns, { report: 'Test' }),
+    ) as unknown;
+    expect(parsed).toEqual({
+      report: 'Test',
+      rowCount: 1,
+      data: [{ ID: 'x', Score: null, Tags: ['t'] }],
+    });
   });
 });
 
 describe('exportFileName', () => {
   it('builds a safe name with a UTC timestamp', () => {
-    expect(exportFileName('Known Exploited / CVEs', 'csv', new Date('2026-11-08T10:20:30Z'))).toBe('known-exploited-cves-2026-11-08-102030.csv');
-    expect(exportFileName('../../', 'json', new Date('2026-11-08T10:20:30Z'))).toBe('report-2026-11-08-102030.json');
+    expect(exportFileName('Known Exploited / CVEs', 'csv', new Date('2026-11-08T10:20:30Z'))).toBe(
+      'known-exploited-cves-2026-11-08-102030.csv',
+    );
+    expect(exportFileName('../../', 'json', new Date('2026-11-08T10:20:30Z'))).toBe(
+      'report-2026-11-08-102030.json',
+    );
   });
 });

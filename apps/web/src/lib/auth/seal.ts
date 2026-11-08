@@ -33,7 +33,9 @@ export function unseal(token: string, key: Buffer, purpose: string): unknown {
     const decipher = createDecipheriv('aes-256-gcm', key, iv);
     decipher.setAAD(Buffer.from(purpose));
     decipher.setAuthTag(tag);
-    const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
+    const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString(
+      'utf8',
+    );
     return JSON.parse(plaintext) as unknown;
   } catch {
     return null;

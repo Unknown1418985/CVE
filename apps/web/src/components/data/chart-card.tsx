@@ -23,7 +23,9 @@ export function ChartCard({
       </CardHeader>
       <CardContent className="flex-1">{children}</CardContent>
       {footer === undefined ? null : (
-        <div className="border-t border-border px-5 py-3 text-xs text-muted-foreground">{footer}</div>
+        <div className="border-t border-border px-5 py-3 text-xs text-muted-foreground">
+          {footer}
+        </div>
       )}
     </Card>
   );

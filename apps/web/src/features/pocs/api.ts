@@ -76,7 +76,12 @@ export function useVerificationHistory(artifactId: string) {
 }
 
 export function usePocReferences(query: QueryParams, enabled = true) {
-  return useApiQuery({ path: 'poc-references', schema: pageSchema(pocReferenceSchema), query, enabled });
+  return useApiQuery({
+    path: 'poc-references',
+    schema: pageSchema(pocReferenceSchema),
+    query,
+    enabled,
+  });
 }
 
 export function usePocConnectors(enabled = true) {

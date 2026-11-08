@@ -50,10 +50,21 @@ export function StatCard({
           <span className="text-sm text-muted-foreground">Unavailable</span>
         </Tooltip>
       ) : (
-        <span className="text-2xl font-semibold tabular-nums">{value === null ? '—' : format(value)}</span>
+        <span className="text-2xl font-semibold tabular-nums">
+          {value === null ? '—' : format(value)}
+        </span>
       )}
       {hint === undefined ? null : <span className="text-xs text-muted-foreground">{hint}</span>}
     </div>
   );
-  return href === undefined ? body : <Link href={href} className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-xl">{body}</Link>;
+  return href === undefined ? (
+    body
+  ) : (
+    <Link
+      href={href}
+      className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-xl"
+    >
+      {body}
+    </Link>
+  );
 }

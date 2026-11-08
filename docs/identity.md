@@ -237,7 +237,6 @@ role changes ending sessions, denied privileged grants in the audit log, and eve
 
 ## Not implemented yet
 
-- Login in the web app (OIDC code flow with PKCE, token storage, refresh). The API is ready for it.
 - A Redis store for the gateway rate limiter (needed before running several gateway replicas).
 - Separate migration and runtime database roles (the service role currently owns its schema).
 - Ingesting audit events from other services (they will publish them once they have features).

@@ -47,19 +47,51 @@ export function Pagination({
             />
           </label>
         )}
-        <Button variant="outline" size="icon" aria-label="First page" disabled={meta.page <= 1} onClick={() => { onPageChange(1); }}>
+        <Button
+          variant="outline"
+          size="icon"
+          aria-label="First page"
+          disabled={meta.page <= 1}
+          onClick={() => {
+            onPageChange(1);
+          }}
+        >
           <ChevronsLeft aria-hidden="true" />
         </Button>
-        <Button variant="outline" size="icon" aria-label="Previous page" disabled={meta.page <= 1} onClick={() => { onPageChange(meta.page - 1); }}>
+        <Button
+          variant="outline"
+          size="icon"
+          aria-label="Previous page"
+          disabled={meta.page <= 1}
+          onClick={() => {
+            onPageChange(meta.page - 1);
+          }}
+        >
           <ChevronLeft aria-hidden="true" />
         </Button>
         <span className="px-1 text-xs text-muted-foreground tabular-nums">
           Page {formatNumber(meta.page)} of {formatNumber(lastPage)}
         </span>
-        <Button variant="outline" size="icon" aria-label="Next page" disabled={meta.page >= lastPage} onClick={() => { onPageChange(meta.page + 1); }}>
+        <Button
+          variant="outline"
+          size="icon"
+          aria-label="Next page"
+          disabled={meta.page >= lastPage}
+          onClick={() => {
+            onPageChange(meta.page + 1);
+          }}
+        >
           <ChevronRight aria-hidden="true" />
         </Button>
-        <Button variant="outline" size="icon" aria-label="Last page" disabled={meta.page >= lastPage} onClick={() => { onPageChange(lastPage); }}>
+        <Button
+          variant="outline"
+          size="icon"
+          aria-label="Last page"
+          disabled={meta.page >= lastPage}
+          onClick={() => {
+            onPageChange(lastPage);
+          }}
+        >
           <ChevronsRight aria-hidden="true" />
         </Button>
       </div>

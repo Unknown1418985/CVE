@@ -4,12 +4,10 @@ A self-hosted platform for vulnerability intelligence, exploit tracking, control
 Proof-of-Concept collection and reporting. Everything is written in TypeScript and organised as a
 pnpm + Turborepo monorepo of independently deployable services.
 
-> **Status: Phase 2 (CVE Service and database).** Keycloak authentication, RBAC, the Identity
-> Service with audit logging, and the CVE Service (CVE records, CVSS v3.1/v4.0, CWE, references,
-> affected products, KEV, EPSS, search and domain events) are implemented as APIs. The web UI and
-> the external data source integrations are not built yet. See [Roadmap](#roadmap),
-> [docs/cve-service.md](docs/cve-service.md), [docs/identity.md](docs/identity.md) and
-> [`CLAUDE.md`](CLAUDE.md).
+> **Status:** Keycloak authentication, RBAC and audit logging, the CVE, Intelligence, Asset, PoC,
+> Download and Exploit services are implemented as APIs, and the web interface covers all of them
+> (see [docs/web.md](docs/web.md)). The Reporting and Notification services have no API yet. See
+> [Roadmap](#roadmap) and [`CLAUDE.md`](CLAUDE.md).
 
 ## Repository layout
 
@@ -103,7 +101,8 @@ Every NestJS service exposes:
 
 The API Gateway also exposes `/api/v1/health/services`, which aggregates the readiness of every
 backend service (status only for anonymous callers). Every other endpoint requires a Keycloak
-access token; see [docs/identity.md](docs/identity.md). The web app exposes `/api/health`. Default ports: gateway `4000`, services
+access token; see [docs/identity.md](docs/identity.md). The web app exposes `/api/health` and signs
+users in through its own backend-for-frontend routes; see [docs/web.md](docs/web.md). Default ports: gateway `4000`, services
 `4001`–`4009` (see `packages/contracts/src/services.ts`), web `3000`.
 
 ## Workspace scripts
@@ -140,11 +139,11 @@ Run a single workspace with `pnpm --filter @cve/<name> <script>`.
 | 0     | Monorepo and infrastructure foundation               | Done       |
 | 1     | Authentication, authorization, audit logging         | Done (API) |
 | 2     | CVE Service and database                             | Done (API) |
-| 3     | NVD, MITRE, CISA and EPSS integrations               | Planned    |
-| 4     | Asset and product intelligence                       | Planned    |
-| 5     | PoC discovery and metadata management                | Planned    |
-| 6     | Secure automated downloads and MinIO storage         | Planned    |
+| 3     | NVD, MITRE, CISA and EPSS integrations               | Done (API) |
+| 4     | Asset and product intelligence                       | Done (API) |
+| 5     | PoC discovery and metadata management                | Done (API) |
+| 6     | Secure automated downloads and MinIO storage         | Done (API) |
 | 7     | Exploit intelligence                                 | Done (API) |
-| 8     | Dashboard and analytics                              | Planned    |
+| 8     | Dashboard and analytics                              | Web UI     |
 | 9     | Reporting and notifications                          | Planned    |
 | 10    | Production hardening, backup, monitoring, deployment | Planned    |

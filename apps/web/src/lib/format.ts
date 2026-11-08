@@ -33,7 +33,10 @@ export function formatDateTime(value: string | Date | null | undefined): string 
   return date === null ? '—' : `${dateTimeFormatter.format(date)} UTC`;
 }
 
-export function formatRelative(value: string | Date | null | undefined, now: Date = new Date()): string {
+export function formatRelative(
+  value: string | Date | null | undefined,
+  now: Date = new Date(),
+): string {
   if (value === null || value === undefined) return '—';
   const date = toDate(value);
   if (date === null) return '—';

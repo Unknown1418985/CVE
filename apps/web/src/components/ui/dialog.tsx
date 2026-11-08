@@ -35,15 +35,29 @@ export function DialogContent({
   );
 }
 
-export function DialogHeader({ className, ...props }: HTMLAttributes<HTMLDivElement>): ReactElement {
+export function DialogHeader({
+  className,
+  ...props
+}: HTMLAttributes<HTMLDivElement>): ReactElement {
   return <div className={cn('flex flex-col gap-1.5 pr-6', className)} {...props} />;
 }
 
-export function DialogFooter({ className, ...props }: HTMLAttributes<HTMLDivElement>): ReactElement {
-  return <div className={cn('flex flex-col-reverse gap-2 sm:flex-row sm:justify-end', className)} {...props} />;
+export function DialogFooter({
+  className,
+  ...props
+}: HTMLAttributes<HTMLDivElement>): ReactElement {
+  return (
+    <div
+      className={cn('flex flex-col-reverse gap-2 sm:flex-row sm:justify-end', className)}
+      {...props}
+    />
+  );
 }
 
-export function DialogTitle({ className, ...props }: ComponentProps<typeof DialogPrimitive.Title>): ReactElement {
+export function DialogTitle({
+  className,
+  ...props
+}: ComponentProps<typeof DialogPrimitive.Title>): ReactElement {
   return <DialogPrimitive.Title className={cn('text-lg font-semibold', className)} {...props} />;
 }
 
@@ -51,5 +65,10 @@ export function DialogDescription({
   className,
   ...props
 }: ComponentProps<typeof DialogPrimitive.Description>): ReactElement {
-  return <DialogPrimitive.Description className={cn('text-sm text-muted-foreground', className)} {...props} />;
+  return (
+    <DialogPrimitive.Description
+      className={cn('text-sm text-muted-foreground', className)}
+      {...props}
+    />
+  );
 }

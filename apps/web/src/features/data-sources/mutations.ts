@@ -12,7 +12,9 @@ import { apiPath, dataSchema, newIdempotencyKey } from '@/lib/api/client';
 import { useApiMutation } from '@/lib/api/hooks';
 
 function queuedMessage(queued: boolean): string {
-  return queued ? 'Synchronisation queued' : 'A synchronisation for this source is already queued or running';
+  return queued
+    ? 'Synchronisation queued'
+    : 'A synchronisation for this source is already queued or running';
 }
 
 /** Queues an intelligence source sync. `fresh` ignores the checkpoint of a recent failed run. */
@@ -41,7 +43,11 @@ export function useRetrySyncRun() {
     }),
     invalidate: ['sources', 'sync-runs'],
     onSuccess: (data) => {
-      toast.success(data.data.queued ? 'Retry queued from the run checkpoint' : 'A synchronisation is already queued');
+      toast.success(
+        data.data.queued
+          ? 'Retry queued from the run checkpoint'
+          : 'A synchronisation is already queued',
+      );
     },
   });
 }

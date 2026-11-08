@@ -8,7 +8,11 @@ import { cn } from '@/lib/utils';
 export function isSafeHttpUrl(value: string): boolean {
   if (!URL.canParse(value)) return false;
   const url = new URL(value);
-  return (url.protocol === 'https:' || url.protocol === 'http:') && url.username === '' && url.password === '';
+  return (
+    (url.protocol === 'https:' || url.protocol === 'http:') &&
+    url.username === '' &&
+    url.password === ''
+  );
 }
 
 /**
@@ -24,14 +28,18 @@ export function ExternalLink({
   children?: ReactNode;
   className?: string | undefined;
 }): ReactElement {
-  if (!isSafeHttpUrl(href)) return <span className={cn('break-all', className)}>{children ?? href}</span>;
+  if (!isSafeHttpUrl(href))
+    return <span className={cn('break-all', className)}>{children ?? href}</span>;
   return (
     <a
       href={href}
       target="_blank"
       rel="noopener noreferrer nofollow"
       referrerPolicy="no-referrer"
-      className={cn('inline-flex items-center gap-1 break-all text-primary hover:underline', className)}
+      className={cn(
+        'inline-flex items-center gap-1 break-all text-primary hover:underline',
+        className,
+      )}
     >
       {children ?? href}
       <ExternalIcon className="size-3 shrink-0" aria-hidden="true" />

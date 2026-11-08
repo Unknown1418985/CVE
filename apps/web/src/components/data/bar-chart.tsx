@@ -2,7 +2,17 @@
 
 import { BarChart3, Table2 } from 'lucide-react';
 import { useState, type ReactElement } from 'react';
-import { Bar, BarChart, CartesianGrid, Rectangle, ResponsiveContainer, Tooltip, XAxis, YAxis, type BarShapeProps } from 'recharts';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Rectangle,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+  type BarShapeProps,
+} from 'recharts';
 
 import { Button } from '@/components/ui/button';
 import { formatNumber } from '@/lib/format';
@@ -77,7 +87,11 @@ export function BarChartView({
               margin={{ top: 4, right: 12, bottom: 4, left: horizontal ? 8 : -8 }}
               barCategoryGap={2}
             >
-              <CartesianGrid stroke="var(--chart-grid)" vertical={horizontal} horizontal={!horizontal} />
+              <CartesianGrid
+                stroke="var(--chart-grid)"
+                vertical={horizontal}
+                horizontal={!horizontal}
+              />
               {horizontal ? (
                 <>
                   <XAxis type="number" allowDecimals={false} {...axisProps} />
@@ -104,7 +118,10 @@ export function BarChartView({
                   if (payload !== undefined) onSelect?.(payload);
                 }}
                 shape={(props: BarShapeProps) => (
-                  <Rectangle {...props} fill={(props.payload as BarDatum | undefined)?.color ?? color} />
+                  <Rectangle
+                    {...props}
+                    fill={(props.payload as BarDatum | undefined)?.color ?? color}
+                  />
                 )}
               />
             </BarChart>

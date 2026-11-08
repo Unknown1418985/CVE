@@ -7,7 +7,9 @@ import { isUuid } from '@/lib/ids';
 
 export const metadata: Metadata = { title: 'Product' };
 
-export default async function ProductPage({ params }: PageProps<'/products/[productId]'>): Promise<ReactElement> {
+export default async function ProductPage({
+  params,
+}: PageProps<'/products/[productId]'>): Promise<ReactElement> {
   const { productId } = await params;
   if (!isUuid(productId)) notFound();
   return <ProductDetail productId={productId} />;

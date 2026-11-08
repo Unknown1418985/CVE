@@ -1,6 +1,13 @@
 'use client';
 
-import { ROLES, ROLE_LABELS, canAssignRole, type Role, type UserSession, type UserSummary } from '@cve/contracts';
+import {
+  ROLES,
+  ROLE_LABELS,
+  canAssignRole,
+  type Role,
+  type UserSession,
+  type UserSummary,
+} from '@cve/contracts';
 import { ArrowLeft, KeyRound, LogOut, ShieldOff, ShieldCheck, X } from 'lucide-react';
 import Link from 'next/link';
 import { useState, type ReactElement } from 'react';
@@ -11,12 +18,25 @@ import { EmptyState, ErrorState, LoadingState, QueryState } from '@/components/d
 import { EnabledBadge } from '@/components/data/status-badges';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { useCan, useMe } from '@/features/auth/use-me';
 import { formatDateTime, formatRelative, humanize } from '@/lib/format';
 
 import { useRoles, useUser, useUserSessions } from './api';
-import { useLogoutUser, useRequirePasswordUpdate, useRevokeUserSession, useSetUserRoles, useSetUserStatus } from './mutations';
+import {
+  useLogoutUser,
+  useRequirePasswordUpdate,
+  useRevokeUserSession,
+  useSetUserRoles,
+  useSetUserStatus,
+} from './mutations';
 import { RoleBadges, displayName } from './user-management';
 
 export function sameRoles(a: readonly Role[], b: readonly Role[]): boolean {
@@ -29,12 +49,20 @@ function RoleEditor({ user }: { user: UserSummary }): ReactElement | null {
   const setRoles = useSetUserRoles();
   const [selected, setSelected] = useState<readonly Role[]>(user.roles);
   const permissions = me.data?.data.permissions;
-  if (!permissions?.some((permission) => permission === 'role:assign' || permission === 'role:assign-privileged')) return null;
+  if (
+    !permissions?.some(
+      (permission) => permission === 'role:assign' || permission === 'role:assign-privileged',
+    )
+  )
+    return null;
   const changed = !sameRoles(selected, user.roles);
   const removed = user.roles.filter((role) => !selected.includes(role));
   const isSelf = me.data?.data.id === user.id;
   return (
-    <Section title="Platform roles" description="Administrator and Super Admin can only be granted or revoked by a Super Admin. Removing a role ends the user's sessions.">
+    <Section
+      title="Platform roles"
+      description="Administrator and Super Admin can only be granted or revoked by a Super Admin. Removing a role ends the user's sessions."
+    >
       <fieldset className="flex flex-col gap-2">
         <legend className="sr-only">Roles</legend>
         {ROLES.map((role) => {
@@ -42,7 +70,11 @@ function RoleEditor({ user }: { user: UserSummary }): ReactElement | null {
           const description = roles.data?.data.find((entry) => entry.role === role);
           const id = `role-${role}`;
           return (
-            <label key={role} htmlFor={id} className="flex items-start gap-3 rounded-md border border-border p-3 has-[:disabled]:opacity-60">
+            <label
+              key={role}
+              htmlFor={id}
+              className="flex items-start gap-3 rounded-md border border-border p-3 has-[:disabled]:opacity-60"
+            >
               <input
                 id={id}
                 type="checkbox"
@@ -50,13 +82,21 @@ function RoleEditor({ user }: { user: UserSummary }): ReactElement | null {
                 checked={selected.includes(role)}
                 disabled={!allowed}
                 onChange={(event) => {
-                  setSelected(event.target.checked ? [...selected, role] : selected.filter((entry) => entry !== role));
+                  setSelected(
+                    event.target.checked
+                      ? [...selected, role]
+                      : selected.filter((entry) => entry !== role),
+                  );
                 }}
               />
               <span className="flex flex-col gap-0.5">
                 <span className="text-sm font-medium">
                   {ROLE_LABELS[role]}
-                  {description?.privileged === true ? <Badge variant="warning" className="ml-2">Privileged</Badge> : null}
+                  {description?.privileged === true ? (
+                    <Badge variant="warning" className="ml-2">
+                      Privileged
+                    </Badge>
+                  ) : null}
                 </span>
                 <span className="text-xs text-muted-foreground">
                   {description === undefined ? '' : `${description.permissions.length} permissions`}
@@ -73,8 +113,19 @@ function RoleEditor({ user }: { user: UserSummary }): ReactElement | null {
           title={`Change roles of ${user.username}`}
           description={
             <div className="flex flex-col gap-2">
-              <p>New roles: {selected.length === 0 ? 'none' : selected.map((role) => ROLE_LABELS[role]).join(', ')}.</p>
-              {removed.length > 0 ? <p className="text-status-degraded">Removing {removed.map((role) => ROLE_LABELS[role]).join(', ')} ends every session of this user.</p> : null}
+              <p>
+                New roles:{' '}
+                {selected.length === 0
+                  ? 'none'
+                  : selected.map((role) => ROLE_LABELS[role]).join(', ')}
+                .
+              </p>
+              {removed.length > 0 ? (
+                <p className="text-status-degraded">
+                  Removing {removed.map((role) => ROLE_LABELS[role]).join(', ')} ends every session
+                  of this user.
+                </p>
+              ) : null}
               {isSelf ? <p className="text-status-down">You are changing your own roles.</p> : null}
             </div>
           }
@@ -82,9 +133,20 @@ function RoleEditor({ user }: { user: UserSummary }): ReactElement | null {
           destructive={removed.length > 0}
           reasonLabel="Reason"
           reasonRequired={false}
-          onConfirm={async (reason) => { await setRoles.mutateAsync({ userId: user.id, roles: selected, reason }); }}
+          onConfirm={async (reason) => {
+            await setRoles.mutateAsync({ userId: user.id, roles: selected, reason });
+          }}
         />
-        {changed ? <Button variant="ghost" onClick={() => { setSelected(user.roles); }}>Discard</Button> : null}
+        {changed ? (
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setSelected(user.roles);
+            }}
+          >
+            Discard
+          </Button>
+        ) : null}
       </div>
     </Section>
   );
@@ -101,7 +163,15 @@ function AccountActions({ user }: { user: UserSummary }): ReactElement | null {
     <div className="flex flex-wrap gap-2">
       {user.enabled ? (
         <ConfirmDialog
-          trigger={<Button variant="destructive" disabled={isSelf} title={isSelf ? 'You cannot disable your own account' : undefined}><ShieldOff aria-hidden="true" /> Disable</Button>}
+          trigger={
+            <Button
+              variant="destructive"
+              disabled={isSelf}
+              title={isSelf ? 'You cannot disable your own account' : undefined}
+            >
+              <ShieldOff aria-hidden="true" /> Disable
+            </Button>
+          }
           title={`Disable ${user.username}`}
           description="The user can no longer sign in and every active session ends immediately."
           confirmLabel="Disable user"
@@ -111,7 +181,11 @@ function AccountActions({ user }: { user: UserSummary }): ReactElement | null {
         />
       ) : (
         <ConfirmDialog
-          trigger={<Button><ShieldCheck aria-hidden="true" /> Enable</Button>}
+          trigger={
+            <Button>
+              <ShieldCheck aria-hidden="true" /> Enable
+            </Button>
+          }
           title={`Enable ${user.username}`}
           description="The user can sign in again with their existing roles."
           confirmLabel="Enable user"
@@ -120,7 +194,11 @@ function AccountActions({ user }: { user: UserSummary }): ReactElement | null {
         />
       )}
       <ConfirmDialog
-        trigger={<Button variant="outline"><KeyRound aria-hidden="true" /> Require password change</Button>}
+        trigger={
+          <Button variant="outline">
+            <KeyRound aria-hidden="true" /> Require password change
+          </Button>
+        }
         title={`Require ${user.username} to change their password`}
         description="Keycloak asks for a new password at the next sign-in. Every active session ends now."
         confirmLabel="Require password change"
@@ -148,21 +226,40 @@ export function SessionTable({
           <TableHead>Last activity</TableHead>
           <TableHead>IP address</TableHead>
           <TableHead>Clients</TableHead>
-          {onRevoke === undefined ? null : <TableHead><span className="sr-only">Actions</span></TableHead>}
+          {onRevoke === undefined ? null : (
+            <TableHead>
+              <span className="sr-only">Actions</span>
+            </TableHead>
+          )}
         </TableRow>
       </TableHeader>
       <TableBody>
         {sessions.map((session) => (
           <TableRow key={session.id}>
-            <TableCell>{formatDateTime(session.startedAt)}{session.current ? <Badge variant="info" className="ml-2">This session</Badge> : null}</TableCell>
-            <TableCell title={formatDateTime(session.lastAccessAt)}>{formatRelative(session.lastAccessAt)}</TableCell>
+            <TableCell>
+              {formatDateTime(session.startedAt)}
+              {session.current ? (
+                <Badge variant="info" className="ml-2">
+                  This session
+                </Badge>
+              ) : null}
+            </TableCell>
+            <TableCell title={formatDateTime(session.lastAccessAt)}>
+              {formatRelative(session.lastAccessAt)}
+            </TableCell>
             <TableCell className="font-mono-id text-xs">{session.ipAddress ?? '—'}</TableCell>
-            <TableCell className="text-xs">{session.clients.length === 0 ? '—' : session.clients.join(', ')}</TableCell>
+            <TableCell className="text-xs">
+              {session.clients.length === 0 ? '—' : session.clients.join(', ')}
+            </TableCell>
             {onRevoke === undefined ? null : (
               <TableCell className="text-right">
                 {session.current ? null : (
                   <ConfirmDialog
-                    trigger={<Button size="sm" variant="outline"><X aria-hidden="true" /> {revokeLabel}</Button>}
+                    trigger={
+                      <Button size="sm" variant="outline">
+                        <X aria-hidden="true" /> {revokeLabel}
+                      </Button>
+                    }
                     title="Revoke session"
                     description="The device using this session is signed out and its refresh token stops working."
                     confirmLabel="Revoke session"
@@ -190,7 +287,11 @@ function Sessions({ user }: { user: UserSummary }): ReactElement | null {
       title="Active sessions"
       actions={
         <ConfirmDialog
-          trigger={<Button variant="destructive" size="sm"><LogOut aria-hidden="true" /> End all sessions</Button>}
+          trigger={
+            <Button variant="destructive" size="sm">
+              <LogOut aria-hidden="true" /> End all sessions
+            </Button>
+          }
           title={`Sign ${user.username} out everywhere`}
           description="Every active session of this user ends and their refresh tokens stop working."
           confirmLabel="End all sessions"
@@ -199,8 +300,17 @@ function Sessions({ user }: { user: UserSummary }): ReactElement | null {
         />
       }
     >
-      <QueryState query={query} isEmpty={(data) => data.data.length === 0} empty={<EmptyState title="No active sessions" />}>
-        {(data) => <SessionTable sessions={data.data} onRevoke={(session) => revoke.mutateAsync({ userId: user.id, sessionId: session.id })} />}
+      <QueryState
+        query={query}
+        isEmpty={(data) => data.data.length === 0}
+        empty={<EmptyState title="No active sessions" />}
+      >
+        {(data) => (
+          <SessionTable
+            sessions={data.data}
+            onRevoke={(session) => revoke.mutateAsync({ userId: user.id, sessionId: session.id })}
+          />
+        )}
       </QueryState>
     </Section>
   );
@@ -208,20 +318,44 @@ function Sessions({ user }: { user: UserSummary }): ReactElement | null {
 
 export function UserDetailView({ userId }: { userId: string }): ReactElement {
   const query = useUser(userId);
-  const back = <Link href="/users" className="inline-flex items-center gap-1 hover:text-foreground"><ArrowLeft className="size-3" aria-hidden="true" /> Users</Link>;
-  if (query.isPending) return <><PageHeader eyebrow={back} title="User" /><LoadingState rows={6} /></>;
+  const back = (
+    <Link href="/users" className="inline-flex items-center gap-1 hover:text-foreground">
+      <ArrowLeft className="size-3" aria-hidden="true" /> Users
+    </Link>
+  );
+  if (query.isPending)
+    return (
+      <>
+        <PageHeader eyebrow={back} title="User" />
+        <LoadingState rows={6} />
+      </>
+    );
   if (query.isError) {
     return (
       <>
         <PageHeader eyebrow={back} title="User" />
-        {query.error.isNotFound ? <EmptyState title="User not found" /> : <ErrorState error={query.error} onRetry={() => { void query.refetch(); }} />}
+        {query.error.isNotFound ? (
+          <EmptyState title="User not found" />
+        ) : (
+          <ErrorState
+            error={query.error}
+            onRetry={() => {
+              void query.refetch();
+            }}
+          />
+        )}
       </>
     );
   }
   const user = query.data.data;
   return (
     <>
-      <PageHeader eyebrow={back} title={displayName(user)} description={user.username} actions={<AccountActions user={user} />} />
+      <PageHeader
+        eyebrow={back}
+        title={displayName(user)}
+        description={user.username}
+        actions={<AccountActions user={user} />}
+      />
       <Section title="Account" actions={<EnabledBadge enabled={user.enabled} />}>
         <DetailList
           items={[
@@ -230,8 +364,18 @@ export function UserDetailView({ userId }: { userId: string }): ReactElement {
             { label: 'Email verified', value: user.emailVerified ? 'Yes' : 'No' },
             { label: 'Created', value: formatDateTime(user.createdAt) },
             { label: 'Roles', value: <RoleBadges roles={user.roles} /> },
-            { label: 'Pending Keycloak actions', value: user.requiredActions.length === 0 ? 'None' : user.requiredActions.map((action) => humanize(action.toLowerCase())).join(', ') },
-            { label: 'User ID', value: <span className="font-mono-id text-xs">{user.id}</span>, wide: true },
+            {
+              label: 'Pending Keycloak actions',
+              value:
+                user.requiredActions.length === 0
+                  ? 'None'
+                  : user.requiredActions.map((action) => humanize(action.toLowerCase())).join(', '),
+            },
+            {
+              label: 'User ID',
+              value: <span className="font-mono-id text-xs">{user.id}</span>,
+              wide: true,
+            },
           ]}
         />
       </Section>

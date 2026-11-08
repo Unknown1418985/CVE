@@ -35,22 +35,39 @@ export function csvField(value: CellValue): string {
 
 export function toCsv<T>(rows: readonly T[], columns: readonly ExportColumn<T>[]): string {
   const lines = [columns.map((column) => csvField(column.header)).join(',')];
-  for (const row of rows) lines.push(columns.map((column) => csvField(column.value(row))).join(','));
+  for (const row of rows)
+    lines.push(columns.map((column) => csvField(column.value(row))).join(','));
   // CRLF line endings and a BOM so spreadsheet applications detect UTF-8.
   return `${BOM}${lines.join('\r\n')}\r\n`;
 }
 
-export function toJson<T>(rows: readonly T[], columns: readonly ExportColumn<T>[], meta: Readonly<Record<string, unknown>>): string {
-  const data = rows.map((row) => Object.fromEntries(columns.map((column) => {
-    const value = column.value(row);
-    return [column.header, value ?? null];
-  })));
+export function toJson<T>(
+  rows: readonly T[],
+  columns: readonly ExportColumn<T>[],
+  meta: Readonly<Record<string, unknown>>,
+): string {
+  const data = rows.map((row) =>
+    Object.fromEntries(
+      columns.map((column) => {
+        const value = column.value(row);
+        return [column.header, value ?? null];
+      }),
+    ),
+  );
   return `${JSON.stringify({ ...meta, rowCount: rows.length, data }, null, 2)}\n`;
 }
 
 /** Safe file name: only letters, digits and dashes, with a UTC timestamp. */
-export function exportFileName(report: string, extension: 'csv' | 'json', now: Date = new Date()): string {
-  const slug = report.toLowerCase().replaceAll(/[^a-z0-9]+/g, '-').replaceAll(/^-+|-+$/g, '') || 'report';
+export function exportFileName(
+  report: string,
+  extension: 'csv' | 'json',
+  now: Date = new Date(),
+): string {
+  const slug =
+    report
+      .toLowerCase()
+      .replaceAll(/[^a-z0-9]+/g, '-')
+      .replaceAll(/^-+|-+$/g, '') || 'report';
   const stamp = now.toISOString().slice(0, 19).replaceAll(':', '').replace('T', '-');
   return `${slug}-${stamp}.${extension}`;
 }

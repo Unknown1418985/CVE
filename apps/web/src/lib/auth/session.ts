@@ -78,7 +78,11 @@ export function sessionFromTokens(tokens: TokenSet): Session | null {
   };
 }
 
-export function readSession(env: ServerEnv, cookies: CookieReader, now = Date.now()): Session | null {
+export function readSession(
+  env: ServerEnv,
+  cookies: CookieReader,
+  now = Date.now(),
+): Session | null {
   const parts: string[] = [];
   for (let index = 0; index < MAX_CHUNKS; index += 1) {
     const value = cookies.get(index === 0 ? SESSION_COOKIE : `${SESSION_COOKIE}.${index}`)?.value;
@@ -86,7 +90,11 @@ export function readSession(env: ServerEnv, cookies: CookieReader, now = Date.no
     parts.push(value);
   }
   if (parts.length === 0) return null;
-  const raw = unseal(parts.join(''), deriveKey(env.WEB_SESSION_SECRET, SESSION_PURPOSE), SESSION_PURPOSE);
+  const raw = unseal(
+    parts.join(''),
+    deriveKey(env.WEB_SESSION_SECRET, SESSION_PURPOSE),
+    SESSION_PURPOSE,
+  );
   const parsed = sessionSchema.safeParse(raw);
   if (!parsed.success) return null;
   if (parsed.data.refreshExpiresAt !== null && parsed.data.refreshExpiresAt <= now) return null;
@@ -117,7 +125,11 @@ export function writeSession(env: ServerEnv, cookies: CookieWriter, session: Ses
 
 export function clearSession(env: ServerEnv, cookies: CookieWriter): void {
   for (let index = 0; index < MAX_CHUNKS; index += 1) {
-    cookies.set(index === 0 ? SESSION_COOKIE : `${SESSION_COOKIE}.${index}`, '', cookieOptions(env, 0));
+    cookies.set(
+      index === 0 ? SESSION_COOKIE : `${SESSION_COOKIE}.${index}`,
+      '',
+      cookieOptions(env, 0),
+    );
   }
 }
 

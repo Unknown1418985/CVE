@@ -4,7 +4,14 @@ import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import type { ReactElement, ReactNode } from 'react';
 
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 
 import { EmptyState, LoadingState } from './states';
@@ -64,14 +71,21 @@ export function DataTable<T>({
   };
 
   return (
-    <div aria-busy={fetching} className={cn('transition-opacity', fetching ? 'opacity-60' : undefined)}>
+    <div
+      aria-busy={fetching}
+      className={cn('transition-opacity', fetching ? 'opacity-60' : undefined)}
+    >
       <Table>
         <caption className="sr-only">{caption}</caption>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
             {columns.map((column) => {
               const active = column.sortField !== undefined && sort?.field === column.sortField;
-              const ariaSort = active ? (sort.order === 'asc' ? 'ascending' : 'descending') : undefined;
+              const ariaSort = active
+                ? sort.order === 'asc'
+                  ? 'ascending'
+                  : 'descending'
+                : undefined;
               return (
                 <TableHead key={column.id} className={column.className} aria-sort={ariaSort}>
                   {column.sortField === undefined || onSortChange === undefined ? (
@@ -113,7 +127,8 @@ export function DataTable<T>({
                     ? undefined
                     : (event) => {
                         // Links and buttons inside the row handle their own clicks.
-                        if ((event.target as HTMLElement).closest('a,button,input,select,label')) return;
+                        if ((event.target as HTMLElement).closest('a,button,input,select,label'))
+                          return;
                         router.push(href);
                       }
                 }

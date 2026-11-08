@@ -3,7 +3,9 @@
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useMemo } from 'react';
 
-export type SearchPatch = Readonly<Record<string, string | readonly string[] | number | undefined | null>>;
+export type SearchPatch = Readonly<
+  Record<string, string | readonly string[] | number | undefined | null>
+>;
 
 /**
  * Filter, sort and pagination state kept in the URL, so views can be bookmarked and shared.

@@ -11,7 +11,9 @@ export async function generateMetadata({ params }: PageProps<'/cves/[cveId]'>): 
   return { title: decodeURIComponent(cveId).toUpperCase() };
 }
 
-export default async function CveDetailPage({ params }: PageProps<'/cves/[cveId]'>): Promise<ReactElement> {
+export default async function CveDetailPage({
+  params,
+}: PageProps<'/cves/[cveId]'>): Promise<ReactElement> {
   const cveId = decodeURIComponent((await params).cveId).toUpperCase();
   if (!CVE_ID.test(cveId)) notFound();
   return <CveDetail cveId={cveId} />;

@@ -29,6 +29,30 @@ jobs:
       - run: pnpm audit --prod --audit-level high
       - run: pnpm compose:config
 
+  # Critical web journeys against a mock Keycloak and API Gateway (apps/web/e2e).
+  web-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: verify
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm --filter @cve/web exec playwright install --with-deps chromium
+      - run: pnpm --filter @cve/web test:e2e
+      - name: Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report
+          retention-days: 7
+
   # Starts the real Compose stack and runs the live integration suites against it.
   integration:
     runs-on: ubuntu-latest

@@ -8,7 +8,16 @@ import {
   vendorSchema,
 } from '@cve/contracts';
 import { Command } from 'cmdk';
-import { ArrowRight, Bug, Building2, FolderGit2, Loader2, Package, Search, Swords } from 'lucide-react';
+import {
+  ArrowRight,
+  Bug,
+  Building2,
+  FolderGit2,
+  Loader2,
+  Package,
+  Search,
+  Swords,
+} from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, type ReactElement, type ReactNode } from 'react';
 
@@ -140,7 +149,9 @@ export function GlobalSearch(): ReactElement {
       >
         <Search className="size-4" aria-hidden="true" />
         <span className="flex-1 truncate text-left">Search CVEs, vendors, PoCs, exploits…</span>
-        <kbd className="hidden rounded border border-border px-1.5 text-[10px] sm:inline">Ctrl K</kbd>
+        <kbd className="hidden rounded border border-border px-1.5 text-[10px] sm:inline">
+          Ctrl K
+        </kbd>
       </button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-2xl gap-0 overflow-hidden p-0">
@@ -158,23 +169,40 @@ export function GlobalSearch(): ReactElement {
                 placeholder="CVE-2026-1234, vendor, product, repository…"
                 className="h-12 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
               />
-              {loading ? <Loader2 className="size-4 animate-spin text-muted-foreground" aria-hidden="true" /> : null}
+              {loading ? (
+                <Loader2 className="size-4 animate-spin text-muted-foreground" aria-hidden="true" />
+              ) : null}
             </div>
             <Command.List className="max-h-[60vh] overflow-y-auto p-1">
               <Command.Empty className="px-3 py-6 text-center text-sm text-muted-foreground">
-                {input.trim().length < 2 ? 'Type at least two characters.' : loading ? 'Searching…' : 'No matches.'}
+                {input.trim().length < 2
+                  ? 'Type at least two characters.'
+                  : loading
+                    ? 'Searching…'
+                    : 'No matches.'}
               </Command.Empty>
               {intent.kind === 'cve' && can('cve:read') ? (
                 <Group heading="Go to">
-                  <Item value={`open-${intent.cveId}`} onSelect={() => { go(`/cves/${intent.cveId}`); }}>
-                    <Bug aria-hidden="true" /> Open <span className="font-mono-id">{intent.cveId}</span>
+                  <Item
+                    value={`open-${intent.cveId}`}
+                    onSelect={() => {
+                      go(`/cves/${intent.cveId}`);
+                    }}
+                  >
+                    <Bug aria-hidden="true" /> Open{' '}
+                    <span className="font-mono-id">{intent.cveId}</span>
                     <ArrowRight className="ml-auto" aria-hidden="true" />
                   </Item>
                 </Group>
               ) : null}
               {intent.kind === 'cpe' && can('asset:read') ? (
                 <Group heading="Go to">
-                  <Item value="open-cpe" onSelect={() => { go(`/vendors?tab=products&cpe=${encodeURIComponent(intent.cpe)}`); }}>
+                  <Item
+                    value="open-cpe"
+                    onSelect={() => {
+                      go(`/vendors?tab=products&cpe=${encodeURIComponent(intent.cpe)}`);
+                    }}
+                  >
                     <Package aria-hidden="true" /> Products registered for this CPE name
                   </Item>
                 </Group>
@@ -182,7 +210,13 @@ export function GlobalSearch(): ReactElement {
               {pages.length > 0 ? (
                 <Group heading="Pages">
                   {pages.map((item) => (
-                    <Item key={item.href} value={`page-${item.href}`} onSelect={() => { go(item.href); }}>
+                    <Item
+                      key={item.href}
+                      value={`page-${item.href}`}
+                      onSelect={() => {
+                        go(item.href);
+                      }}
+                    >
                       <item.icon aria-hidden="true" /> {item.label}
                     </Item>
                   ))}
@@ -191,17 +225,34 @@ export function GlobalSearch(): ReactElement {
               {text !== null && can('cve:read') ? (
                 <Group heading="CVEs">
                   {cves.data?.data.map((cve) => (
-                    <Item key={cve.id} value={`cve-${cve.cveId}`} onSelect={() => { go(`/cves/${cve.cveId}`); }}>
+                    <Item
+                      key={cve.id}
+                      value={`cve-${cve.cveId}`}
+                      onSelect={() => {
+                        go(`/cves/${cve.cveId}`);
+                      }}
+                    >
                       <Bug aria-hidden="true" />
                       <span className="font-mono-id">{cve.cveId}</span>
-                      <span className="truncate text-muted-foreground">{cve.title ?? cve.description}</span>
-                      <span className="ml-auto"><SeverityBadge severity={cve.severity} /></span>
+                      <span className="truncate text-muted-foreground">
+                        {cve.title ?? cve.description}
+                      </span>
+                      <span className="ml-auto">
+                        <SeverityBadge severity={cve.severity} />
+                      </span>
                     </Item>
                   ))}
-                  <Item value="all-cves" onSelect={() => { go(`/cves?q=${encodeURIComponent(text)}`); }}>
+                  <Item
+                    value="all-cves"
+                    onSelect={() => {
+                      go(`/cves?q=${encodeURIComponent(text)}`);
+                    }}
+                  >
                     <Search aria-hidden="true" /> Search all CVEs for “{text}”
                     {cves.data === undefined ? null : (
-                      <span className="ml-auto text-xs text-muted-foreground">{cves.data.meta.totalItems} matches</span>
+                      <span className="ml-auto text-xs text-muted-foreground">
+                        {cves.data.meta.totalItems} matches
+                      </span>
                     )}
                   </Item>
                 </Group>
@@ -209,9 +260,17 @@ export function GlobalSearch(): ReactElement {
               {vendors.data !== undefined && vendors.data.data.length > 0 ? (
                 <Group heading="Vendors">
                   {vendors.data.data.map((vendor) => (
-                    <Item key={vendor.id} value={`vendor-${vendor.id}`} onSelect={() => { go(`/vendors/${vendor.id}`); }}>
+                    <Item
+                      key={vendor.id}
+                      value={`vendor-${vendor.id}`}
+                      onSelect={() => {
+                        go(`/vendors/${vendor.id}`);
+                      }}
+                    >
                       <Building2 aria-hidden="true" /> {vendor.name}
-                      <span className="ml-auto text-xs text-muted-foreground">{vendor.cveCount} CVEs</span>
+                      <span className="ml-auto text-xs text-muted-foreground">
+                        {vendor.cveCount} CVEs
+                      </span>
                     </Item>
                   ))}
                 </Group>
@@ -219,9 +278,17 @@ export function GlobalSearch(): ReactElement {
               {products.data !== undefined && products.data.data.length > 0 ? (
                 <Group heading="Products">
                   {products.data.data.map((product) => (
-                    <Item key={product.id} value={`product-${product.id}`} onSelect={() => { go(`/products/${product.id}`); }}>
+                    <Item
+                      key={product.id}
+                      value={`product-${product.id}`}
+                      onSelect={() => {
+                        go(`/products/${product.id}`);
+                      }}
+                    >
                       <Package aria-hidden="true" /> {product.vendor.name} {product.name}
-                      <span className="ml-auto text-xs text-muted-foreground">{product.cveCount} CVEs</span>
+                      <span className="ml-auto text-xs text-muted-foreground">
+                        {product.cveCount} CVEs
+                      </span>
                     </Item>
                   ))}
                 </Group>
@@ -229,7 +296,13 @@ export function GlobalSearch(): ReactElement {
               {repositories.data !== undefined && repositories.data.data.length > 0 ? (
                 <Group heading="PoC repositories">
                   {repositories.data.data.map((repository) => (
-                    <Item key={repository.id} value={`repo-${repository.id}`} onSelect={() => { go(`/pocs/${repository.id}`); }}>
+                    <Item
+                      key={repository.id}
+                      value={`repo-${repository.id}`}
+                      onSelect={() => {
+                        go(`/pocs/${repository.id}`);
+                      }}
+                    >
                       <FolderGit2 aria-hidden="true" /> {repository.fullName}
                     </Item>
                   ))}
@@ -238,7 +311,13 @@ export function GlobalSearch(): ReactElement {
               {exploits.data !== undefined && exploits.data.data.length > 0 ? (
                 <Group heading="Exploits">
                   {exploits.data.data.map((exploit) => (
-                    <Item key={exploit.id} value={`exploit-${exploit.id}`} onSelect={() => { go(`/exploits/${exploit.id}`); }}>
+                    <Item
+                      key={exploit.id}
+                      value={`exploit-${exploit.id}`}
+                      onSelect={() => {
+                        go(`/exploits/${exploit.id}`);
+                      }}
+                    >
                       <Swords aria-hidden="true" /> {exploit.title ?? exploit.externalId}
                     </Item>
                   ))}

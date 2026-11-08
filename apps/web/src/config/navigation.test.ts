@@ -27,7 +27,13 @@ describe('navigation', () => {
 
   it('only shows sections the user is permitted to see', () => {
     const viewer = visibleNavigation(new Set(['cve:read', 'poc:read']));
-    expect(viewer.map((item) => item.href)).toEqual(['/', '/cves', '/analysis', '/pocs', '/settings']);
+    expect(viewer.map((item) => item.href)).toEqual([
+      '/',
+      '/cves',
+      '/analysis',
+      '/pocs',
+      '/settings',
+    ]);
     expect(visibleNavigation(undefined).map((item) => item.href)).toEqual(['/', '/settings']);
   });
 

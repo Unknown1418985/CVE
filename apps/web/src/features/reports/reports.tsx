@@ -70,18 +70,25 @@ export const REPORTS = [
   defineReport<CveSummary>({
     id: 'critical-high-cves',
     title: 'Critical and high severity CVEs',
-    description: 'Every CVE rated critical or high, with CVSS, EPSS, KEV status and CWE classification.',
+    description:
+      'Every CVE rated critical or high, with CVSS, EPSS, KEV status and CWE classification.',
     permission: 'cve:read',
     path: 'cves',
     rowSchema: cveSummarySchema,
     sinceLabel: 'Published since',
-    query: (since) => ({ severity: ['critical', 'high'], publishedFrom: since, sort: 'cvssScore', order: 'desc' }),
+    query: (since) => ({
+      severity: ['critical', 'high'],
+      publishedFrom: since,
+      sort: 'cvssScore',
+      order: 'desc',
+    }),
     columns: CVE_COLUMNS,
   }),
   defineReport<CveSummary>({
     id: 'known-exploited-cves',
     title: 'Known exploited vulnerabilities',
-    description: 'CVEs listed in the CISA Known Exploited Vulnerabilities catalog, ordered by EPSS score.',
+    description:
+      'CVEs listed in the CISA Known Exploited Vulnerabilities catalog, ordered by EPSS score.',
     permission: 'cve:read',
     path: 'cves',
     rowSchema: cveSummarySchema,
@@ -92,18 +99,26 @@ export const REPORTS = [
   defineReport<CveExploitAssessment>({
     id: 'exploitation-status',
     title: 'Exploitation status',
-    description: 'CVEs with a functional exploit, weaponized exploit or exploitation in the wild, with the evidence behind each classification.',
+    description:
+      'CVEs with a functional exploit, weaponized exploit or exploitation in the wild, with the evidence behind each classification.',
     permission: 'exploit:read',
     path: 'exploit-assessments',
     rowSchema: cveExploitAssessmentSchema,
-    query: () => ({ maturity: ['functional', 'weaponized', 'exploited-in-the-wild'], sort: 'confidence', order: 'desc' }),
+    query: () => ({
+      maturity: ['functional', 'weaponized', 'exploited-in-the-wild'],
+      sort: 'confidence',
+      order: 'desc',
+    }),
     columns: [
       { header: 'CVE ID', value: (row) => row.cveId },
       { header: 'Maturity', value: (row) => row.maturity },
       { header: 'Confidence', value: (row) => row.confidence },
       { header: 'Public PoC', value: (row) => row.indicators.publicPoc.present },
       { header: 'Functional exploit', value: (row) => row.indicators.functionalExploit.present },
-      { header: 'Exploited in the wild', value: (row) => row.indicators.exploitedInTheWild.present },
+      {
+        header: 'Exploited in the wild',
+        value: (row) => row.indicators.exploitedInTheWild.present,
+      },
       { header: 'In CISA KEV', value: (row) => row.inKev },
       { header: 'Known ransomware use', value: (row) => row.knownRansomwareCampaignUse },
       { header: 'Exploits', value: (row) => row.availability.exploitCount },
@@ -118,7 +133,8 @@ export const REPORTS = [
   defineReport<DownloadArtifact>({
     id: 'artifact-security-status',
     title: 'Stored artifact security status',
-    description: 'Downloaded PoC artifacts with lifecycle, scan and verification status, hashes and provenance. Quarantined artifacts are included only for roles that may inspect them.',
+    description:
+      'Downloaded PoC artifacts with lifecycle, scan and verification status, hashes and provenance. Quarantined artifacts are included only for roles that may inspect them.',
     permission: 'download:read',
     path: 'download-artifacts',
     rowSchema: downloadArtifactSchema,
@@ -176,7 +192,11 @@ export async function collectRows<T>(
   const rows: T[] = [];
   let total = 0;
   for (let page = 1; rows.length < MAX_EXPORT_ROWS; page += 1) {
-    const result = await apiRequest(report.path, { schema, query: { ...report.query(since), page, pageSize: PAGE_SIZE }, signal });
+    const result = await apiRequest(report.path, {
+      schema,
+      query: { ...report.query(since), page, pageSize: PAGE_SIZE },
+      signal,
+    });
     total = result.meta.totalItems;
     rows.push(...result.data);
     onProgress(rows.length, total);
@@ -193,7 +213,9 @@ function saveFile(content: string, fileName: string, type: string): void {
   document.body.append(link);
   link.click();
   link.remove();
-  setTimeout(() => { URL.revokeObjectURL(url); }, 1_000);
+  setTimeout(() => {
+    URL.revokeObjectURL(url);
+  }, 1_000);
 }
 
 type Status =
@@ -209,12 +231,20 @@ function ReportCard<T>({ report }: { report: ReportDefinition<T> }): ReactElemen
     setStatus({ kind: 'running', loaded: 0, total: 0 });
     try {
       const sinceValue = sinceTimestamp(since);
-      const { rows, total } = await collectRows(report, sinceValue, (loaded, all) => { setStatus({ kind: 'running', loaded, total: all }); });
+      const { rows, total } = await collectRows(report, sinceValue, (loaded, all) => {
+        setStatus({ kind: 'running', loaded, total: all });
+      });
       const fileName = exportFileName(report.title, format);
-      if (format === 'csv') saveFile(toCsv(rows, report.columns), fileName, 'text/csv;charset=utf-8');
+      if (format === 'csv')
+        saveFile(toCsv(rows, report.columns), fileName, 'text/csv;charset=utf-8');
       else {
         saveFile(
-          toJson(rows, report.columns, { report: report.title, generatedAt: new Date().toISOString(), filters: report.query(sinceValue), totalAvailable: total }),
+          toJson(rows, report.columns, {
+            report: report.title,
+            generatedAt: new Date().toISOString(),
+            filters: report.query(sinceValue),
+            totalAvailable: total,
+          }),
           fileName,
           'application/json',
         );
@@ -226,7 +256,10 @@ function ReportCard<T>({ report }: { report: ReportDefinition<T> }): ReactElemen
   };
   const running = status.kind === 'running';
   return (
-    <li className="flex flex-col gap-3 rounded-xl border border-border bg-card p-5" data-testid={`report-${report.id}`}>
+    <li
+      className="flex flex-col gap-3 rounded-xl border border-border bg-card p-5"
+      data-testid={`report-${report.id}`}
+    >
       <div>
         <h2 className="font-semibold">{report.title}</h2>
         <p className="mt-1 text-sm text-muted-foreground">{report.description}</p>
@@ -235,29 +268,57 @@ function ReportCard<T>({ report }: { report: ReportDefinition<T> }): ReactElemen
         {report.sinceLabel === undefined ? null : (
           <div className="flex flex-col gap-1.5">
             <Label htmlFor={`${report.id}-since`}>{report.sinceLabel} (optional)</Label>
-            <Input id={`${report.id}-since`} type="date" className="w-44" value={since} onChange={(event) => { setSince(event.target.value); }} />
+            <Input
+              id={`${report.id}-since`}
+              type="date"
+              className="w-44"
+              value={since}
+              onChange={(event) => {
+                setSince(event.target.value);
+              }}
+            />
           </div>
         )}
-        <Button variant="outline" disabled={running} onClick={() => { void run('csv'); }}>
+        <Button
+          variant="outline"
+          disabled={running}
+          onClick={() => {
+            void run('csv');
+          }}
+        >
           <FileSpreadsheet aria-hidden="true" /> Export CSV
         </Button>
-        <Button variant="outline" disabled={running} onClick={() => { void run('json'); }}>
+        <Button
+          variant="outline"
+          disabled={running}
+          onClick={() => {
+            void run('json');
+          }}
+        >
           <FileJson aria-hidden="true" /> Export JSON
         </Button>
       </div>
       <div aria-live="polite" className="text-xs">
         {status.kind === 'running' ? (
           <span className="inline-flex items-center gap-1 text-muted-foreground">
-            <Loader2 className="size-3 animate-spin" aria-hidden="true" /> Loading {formatNumber(status.loaded)}
-            {status.total > 0 ? ` of ${formatNumber(Math.min(status.total, MAX_EXPORT_ROWS))}` : ''} rows…
+            <Loader2 className="size-3 animate-spin" aria-hidden="true" /> Loading{' '}
+            {formatNumber(status.loaded)}
+            {status.total > 0
+              ? ` of ${formatNumber(Math.min(status.total, MAX_EXPORT_ROWS))}`
+              : ''}{' '}
+            rows…
           </span>
         ) : status.kind === 'done' ? (
           <span className="text-muted-foreground">
             Exported {formatNumber(status.rows)} rows.
-            {status.total > status.rows ? ` ${formatNumber(status.total)} match; browser exports are limited to ${formatNumber(MAX_EXPORT_ROWS)} rows, narrow the date filter for the rest.` : ''}
+            {status.total > status.rows
+              ? ` ${formatNumber(status.total)} match; browser exports are limited to ${formatNumber(MAX_EXPORT_ROWS)} rows, narrow the date filter for the rest.`
+              : ''}
           </span>
         ) : status.kind === 'error' ? (
-          <span role="alert" className="text-status-down">{status.message}</span>
+          <span role="alert" className="text-status-down">
+            {status.message}
+          </span>
         ) : null}
       </div>
     </li>
@@ -266,23 +327,32 @@ function ReportCard<T>({ report }: { report: ReportDefinition<T> }): ReactElemen
 
 export function ReportsView(): ReactElement {
   const permissions = usePermissions();
-  const available = permissions === undefined ? [] : REPORTS.filter((report) => permissions.has(report.permission));
+  const available =
+    permissions === undefined ? [] : REPORTS.filter((report) => permissions.has(report.permission));
   return (
     <>
-      <PageHeader title="Reports" description="Export live platform data for briefings, compliance reviews and offline analysis." />
+      <PageHeader
+        title="Reports"
+        description="Export live platform data for briefings, compliance reviews and offline analysis."
+      />
       <div className="flex gap-3 rounded-xl border border-border bg-card p-4 text-sm" role="note">
         <Info className="mt-0.5 size-4 shrink-0 text-status-info" aria-hidden="true" />
         <p className="text-muted-foreground">
-          These exports are generated in your browser from the same APIs the rest of the interface uses, so they reflect exactly what
-          your role can see right now. Stored, scheduled and shared reports come with the Reporting Service, which does not expose an
-          API yet; nothing is listed here until it does.
+          These exports are generated in your browser from the same APIs the rest of the interface
+          uses, so they reflect exactly what your role can see right now. Stored, scheduled and
+          shared reports come with the Reporting Service, which does not expose an API yet; nothing
+          is listed here until it does.
         </p>
       </div>
       {permissions === undefined ? null : available.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Your role has no access to data that can be exported.</p>
+        <p className="text-sm text-muted-foreground">
+          Your role has no access to data that can be exported.
+        </p>
       ) : (
         <ul className="grid gap-4 lg:grid-cols-2">
-          {available.map((report) => <ReportCard key={report.id} report={report as ReportDefinition<unknown>} />)}
+          {available.map((report) => (
+            <ReportCard key={report.id} report={report as ReportDefinition<unknown>} />
+          ))}
         </ul>
       )}
     </>

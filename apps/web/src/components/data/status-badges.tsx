@@ -53,7 +53,12 @@ function StatusBadge({
   const Icon = style.icon;
   const label = style.label ?? humanize(value);
   return (
-    <Badge variant={style.variant} className={cn('gap-1', className)} data-testid={testId} data-status={value}>
+    <Badge
+      variant={style.variant}
+      className={cn('gap-1', className)}
+      data-testid={testId}
+      data-status={value}
+    >
       {Icon === undefined ? null : <Icon className="size-3" aria-hidden="true" />}
       {prefix === undefined ? label : `${prefix}: ${label}`}
     </Badge>
@@ -133,7 +138,11 @@ const VERIFICATION: Readonly<Record<ArtifactVerificationStatus, StatusStyle>> = 
   malicious: { variant: 'destructive', icon: ShieldX, label: 'Malicious' },
 };
 
-export function VerificationBadge({ status }: { status: ArtifactVerificationStatus }): ReactElement {
+export function VerificationBadge({
+  status,
+}: {
+  status: ArtifactVerificationStatus;
+}): ReactElement {
   return <StatusBadge value={status} styles={VERIFICATION} testId="verification-status" />;
 }
 
@@ -191,10 +200,18 @@ const MATURITY: Readonly<Record<CveExploitMaturity, StatusStyle>> = {
   'proof-of-concept': { variant: 'info', label: 'Proof of concept' },
   functional: { variant: 'warning', icon: TriangleAlert },
   weaponized: { variant: 'destructive', icon: ShieldAlert },
-  'exploited-in-the-wild': { variant: 'destructive', icon: ShieldX, label: 'Exploited in the wild' },
+  'exploited-in-the-wild': {
+    variant: 'destructive',
+    icon: ShieldX,
+    label: 'Exploited in the wild',
+  },
 };
 
-export function MaturityBadge({ maturity }: { maturity: CveExploitMaturity | ExploitMaturity }): ReactElement {
+export function MaturityBadge({
+  maturity,
+}: {
+  maturity: CveExploitMaturity | ExploitMaturity;
+}): ReactElement {
   return <StatusBadge value={maturity} styles={MATURITY} testId="maturity" />;
 }
 
@@ -241,6 +258,14 @@ export function KevBadge({ inKev }: { inKev: boolean }): ReactElement | null {
   );
 }
 
-export function EnabledBadge({ enabled, onLabel = 'Enabled', offLabel = 'Disabled' }: { enabled: boolean; onLabel?: string; offLabel?: string }): ReactElement {
+export function EnabledBadge({
+  enabled,
+  onLabel = 'Enabled',
+  offLabel = 'Disabled',
+}: {
+  enabled: boolean;
+  onLabel?: string;
+  offLabel?: string;
+}): ReactElement {
   return <Badge variant={enabled ? 'success' : 'muted'}>{enabled ? onLabel : offLabel}</Badge>;
 }

@@ -28,19 +28,32 @@ export function AlertDialogContent({
   );
 }
 
-export function AlertDialogHeader({ className, ...props }: HTMLAttributes<HTMLDivElement>): ReactElement {
+export function AlertDialogHeader({
+  className,
+  ...props
+}: HTMLAttributes<HTMLDivElement>): ReactElement {
   return <div className={cn('flex flex-col gap-1.5', className)} {...props} />;
 }
 
-export function AlertDialogFooter({ className, ...props }: HTMLAttributes<HTMLDivElement>): ReactElement {
-  return <div className={cn('flex flex-col-reverse gap-2 sm:flex-row sm:justify-end', className)} {...props} />;
+export function AlertDialogFooter({
+  className,
+  ...props
+}: HTMLAttributes<HTMLDivElement>): ReactElement {
+  return (
+    <div
+      className={cn('flex flex-col-reverse gap-2 sm:flex-row sm:justify-end', className)}
+      {...props}
+    />
+  );
 }
 
 export function AlertDialogTitle({
   className,
   ...props
 }: ComponentProps<typeof AlertDialogPrimitive.Title>): ReactElement {
-  return <AlertDialogPrimitive.Title className={cn('text-lg font-semibold', className)} {...props} />;
+  return (
+    <AlertDialogPrimitive.Title className={cn('text-lg font-semibold', className)} {...props} />
+  );
 }
 
 export function AlertDialogDescription({
@@ -48,7 +61,10 @@ export function AlertDialogDescription({
   ...props
 }: ComponentProps<typeof AlertDialogPrimitive.Description>): ReactElement {
   return (
-    <AlertDialogPrimitive.Description className={cn('text-sm text-muted-foreground', className)} {...props} />
+    <AlertDialogPrimitive.Description
+      className={cn('text-sm text-muted-foreground', className)}
+      {...props}
+    />
   );
 }
 
@@ -56,5 +72,10 @@ export function AlertDialogCancel({
   className,
   ...props
 }: ComponentProps<typeof AlertDialogPrimitive.Cancel>): ReactElement {
-  return <AlertDialogPrimitive.Cancel className={cn(buttonVariants({ variant: 'outline' }), className)} {...props} />;
+  return (
+    <AlertDialogPrimitive.Cancel
+      className={cn(buttonVariants({ variant: 'outline' }), className)}
+      {...props}
+    />
+  );
 }

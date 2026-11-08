@@ -18,7 +18,12 @@ export function LoadingState({
   className?: string | undefined;
 }): ReactElement {
   return (
-    <div role="status" aria-live="polite" aria-label={label} className={cn('flex flex-col gap-2 py-2', className)}>
+    <div
+      role="status"
+      aria-live="polite"
+      aria-label={label}
+      className={cn('flex flex-col gap-2 py-2', className)}
+    >
       {Array.from({ length: rows }, (_, index) => (
         <Skeleton key={index} className="h-8 w-full" />
       ))}
@@ -48,7 +53,9 @@ export function EmptyState({
         className,
       )}
     >
-      <div className="text-muted-foreground">{icon ?? <Inbox className="size-6" aria-hidden="true" />}</div>
+      <div className="text-muted-foreground">
+        {icon ?? <Inbox className="size-6" aria-hidden="true" />}
+      </div>
       <p className="text-sm font-medium">{title}</p>
       {description === undefined ? null : (
         <p className="max-w-md text-sm text-muted-foreground">{description}</p>

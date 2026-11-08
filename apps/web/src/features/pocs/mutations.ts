@@ -21,7 +21,12 @@ export function ifMatch(version: number): Record<string, string> {
 export function useReviewAssociation() {
   return useApiMutation({
     schema: dataSchema(pocAssociationSchema),
-    request: (input: { id: string; version: number; reviewStatus: AssociationReviewStatus; note: string }) => ({
+    request: (input: {
+      id: string;
+      version: number;
+      reviewStatus: AssociationReviewStatus;
+      note: string;
+    }) => ({
       path: apiPath('poc-associations', input.id),
       method: 'PATCH',
       body: { reviewStatus: input.reviewStatus, note: input.note === '' ? null : input.note },
@@ -37,7 +42,12 @@ export function useReviewAssociation() {
 export function useChangeVerification() {
   return useApiMutation({
     schema: dataSchema(pocArtifactSchema),
-    request: (input: { id: string; version: number; status: ArtifactVerificationStatus; reason: string }) => ({
+    request: (input: {
+      id: string;
+      version: number;
+      status: ArtifactVerificationStatus;
+      reason: string;
+    }) => ({
       path: apiPath('poc-artifacts', input.id, 'verification'),
       method: 'POST',
       body: { status: input.status, reason: input.reason },
@@ -66,7 +76,9 @@ export function useTriggerDiscovery() {
     }),
     invalidate: ['poc-discovery-runs'],
     onSuccess: (data) => {
-      toast.success(data.data.queued ? 'Discovery job queued' : 'An identical discovery job is already queued');
+      toast.success(
+        data.data.queued ? 'Discovery job queued' : 'An identical discovery job is already queued',
+      );
     },
   });
 }
@@ -77,11 +89,18 @@ export function useScheduleArtifactDownload() {
     request: (input: { pocArtifactId: string; reason: string }) => ({
       path: 'download-requests',
       method: 'POST',
-      body: { pocArtifactId: input.pocArtifactId, reason: input.reason === '' ? null : input.reason },
+      body: {
+        pocArtifactId: input.pocArtifactId,
+        reason: input.reason === '' ? null : input.reason,
+      },
     }),
     invalidate: ['download-requests'],
     onSuccess: (data) => {
-      toast.success(data.data.created ? 'Download scheduled. The file will land in quarantine.' : 'This artifact was already requested.');
+      toast.success(
+        data.data.created
+          ? 'Download scheduled. The file will land in quarantine.'
+          : 'This artifact was already requested.',
+      );
     },
   });
 }

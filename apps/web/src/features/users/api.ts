@@ -18,7 +18,13 @@ export const sessionsSchema = dataSchema(z.array(userSessionSchema));
 export const revokedSchema = dataSchema(z.object({ revokedSessions: z.number().int().min(0) }));
 
 export function useUsers(query: QueryParams, enabled = true) {
-  return useApiQuery({ path: 'users', schema: pageSchema(userSummarySchema), query, enabled, keepPrevious: true });
+  return useApiQuery({
+    path: 'users',
+    schema: pageSchema(userSummarySchema),
+    query,
+    enabled,
+    keepPrevious: true,
+  });
 }
 
 export function useUser(userId: string) {
@@ -26,7 +32,11 @@ export function useUser(userId: string) {
 }
 
 export function useUserSessions(userId: string, enabled = true) {
-  return useApiQuery({ path: apiPath('users', userId, 'sessions'), schema: sessionsSchema, enabled });
+  return useApiQuery({
+    path: apiPath('users', userId, 'sessions'),
+    schema: sessionsSchema,
+    enabled,
+  });
 }
 
 export function useMySessions() {
@@ -34,7 +44,10 @@ export function useMySessions() {
 }
 
 export function useCredentialActions() {
-  return useApiQuery({ path: 'me/credentials/actions', schema: dataSchema(z.array(credentialActionLinkSchema)) });
+  return useApiQuery({
+    path: 'me/credentials/actions',
+    schema: dataSchema(z.array(credentialActionLinkSchema)),
+  });
 }
 
 export function useRoles() {
@@ -42,11 +55,20 @@ export function useRoles() {
 }
 
 export function usePermissionCatalog() {
-  return useApiQuery({ path: 'permissions', schema: dataSchema(z.array(permissionDescriptionSchema)) });
+  return useApiQuery({
+    path: 'permissions',
+    schema: dataSchema(z.array(permissionDescriptionSchema)),
+  });
 }
 
 export function useAuditEvents(query: QueryParams, enabled = true) {
-  return useApiQuery({ path: 'audit-logs', schema: pageSchema(auditEventSchema), query, enabled, keepPrevious: true });
+  return useApiQuery({
+    path: 'audit-logs',
+    schema: pageSchema(auditEventSchema),
+    query,
+    enabled,
+    keepPrevious: true,
+  });
 }
 
 export function useAuditEvent(eventId: string | null) {

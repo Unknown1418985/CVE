@@ -116,7 +116,11 @@ export async function apiRequest<T extends z.ZodType>(
     });
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') throw error;
-    throw new ApiError(0, 'network_error', 'The platform could not be reached. Check your connection.');
+    throw new ApiError(
+      0,
+      'network_error',
+      'The platform could not be reached. Check your connection.',
+    );
   }
 
   const payload = await readJson(response);
@@ -132,7 +136,11 @@ export async function apiRequest<T extends z.ZodType>(
         parsed.data.correlationId ?? null,
       );
     }
-    throw new ApiError(response.status, 'http_error', `The request failed with HTTP ${response.status}.`);
+    throw new ApiError(
+      response.status,
+      'http_error',
+      `The request failed with HTTP ${response.status}.`,
+    );
   }
 
   const parsed = options.schema.safeParse(payload);

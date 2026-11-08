@@ -39,12 +39,25 @@ export function ResultsPanel({
 }): ReactElement {
   return (
     <section className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
-      {query.isError ? <ErrorState error={query.error} onRetry={() => { void query.refetch(); }} /> : children}
+      {query.isError ? (
+        <ErrorState
+          error={query.error}
+          onRetry={() => {
+            void query.refetch();
+          }}
+        />
+      ) : (
+        children
+      )}
       {query.data === undefined || query.isError ? null : (
         <Pagination
           meta={query.data.meta}
-          onPageChange={(page) => { update({ page }); }}
-          onPageSizeChange={(pageSize) => { update({ pageSize }); }}
+          onPageChange={(page) => {
+            update({ page });
+          }}
+          onPageSizeChange={(pageSize) => {
+            update({ pageSize });
+          }}
         />
       )}
     </section>
@@ -68,7 +81,9 @@ export function CveIdFilter({
         placeholder="CVE-2026-1234"
         maxLength={30}
         aria-invalid={value !== '' && !CVE_ID_PATTERN.test(value)}
-        onChange={(event) => { update({ cveId: event.target.value.trim().toUpperCase() }); }}
+        onChange={(event) => {
+          update({ cveId: event.target.value.trim().toUpperCase() });
+        }}
       />
     </FilterField>
   );
@@ -86,7 +101,10 @@ export function sortFromValues(
   return { field, order };
 }
 
-export function pagingFromValues(values: { page: string; pageSize: string }): { page: number; pageSize: number } {
+export function pagingFromValues(values: { page: string; pageSize: string }): {
+  page: number;
+  pageSize: number;
+} {
   const page = Number.parseInt(values.page, 10);
   const pageSize = Number.parseInt(values.pageSize, 10);
   return {

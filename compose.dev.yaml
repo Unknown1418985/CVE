@@ -31,6 +31,8 @@ services:
     ports: ['127.0.0.1:8180:8180']
     environment:
       KC_HOSTNAME: http://localhost:8180/auth
+      # `pnpm dev` serves the web app on :3000; the cve-web client must redirect there.
+      KEYCLOAK_WEB_ORIGIN: http://localhost:3000
   clamav:
     networks: [scanning, egress, dev-host]
     ports: ['127.0.0.1:3310:3310']

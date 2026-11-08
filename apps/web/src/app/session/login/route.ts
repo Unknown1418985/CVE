@@ -18,7 +18,8 @@ export const dynamic = 'force-dynamic';
 export function GET(request: NextRequest): NextResponse {
   const env = getServerEnv();
   const actionParam = request.nextUrl.searchParams.get('action');
-  const action = actionParam !== null && isKeycloakActionName(actionParam) ? actionParam : undefined;
+  const action =
+    actionParam !== null && isKeycloakActionName(actionParam) ? actionParam : undefined;
   const transaction = {
     state: randomToken(),
     nonce: randomToken(),
@@ -26,7 +27,10 @@ export function GET(request: NextRequest): NextResponse {
     returnTo: safeReturnTo(request.nextUrl.searchParams.get('returnTo')),
     createdAt: Date.now(),
   };
-  const response = NextResponse.redirect(buildAuthorizationUrl(env, { ...transaction, action }), 303);
+  const response = NextResponse.redirect(
+    buildAuthorizationUrl(env, { ...transaction, action }),
+    303,
+  );
   response.headers.set('cache-control', 'no-store');
   writeTransaction(env, response.cookies, transaction);
   return response;

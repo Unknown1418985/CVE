@@ -2,7 +2,7 @@ import { API_PREFIX } from '@cve/contracts';
 import { NextResponse, type NextRequest } from 'next/server';
 
 import { endSessionUrl } from '@/lib/auth/oidc';
-import { isSameOriginRequest } from '@/lib/auth/request-guards';
+import { CLIENT_HEADER, CLIENT_HEADER_VALUE, isSameOriginRequest } from '@/lib/auth/request-guards';
 import { clearSession, readSession } from '@/lib/auth/session';
 import { getServerEnv } from '@/lib/env';
 import { logger } from '@/lib/logger';
@@ -13,12 +13,21 @@ export const dynamic = 'force-dynamic';
  * Secure logout: ends the Keycloak session through the API Gateway (which also stops accepting
  * the access token at once), then discards the cookies. If the gateway cannot be reached, the
  * browser is sent to Keycloak's own logout endpoint so the SSO session still ends.
+ *
+ * Called with `fetch` (custom header, same origin) and answers with the URL to navigate to, so
+ * the cross-origin Keycloak redirect is a plain navigation rather than a form redirect.
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const env = getServerEnv();
-  if (!isSameOriginRequest(request.headers, env.PUBLIC_ORIGIN)) {
+  if (
+    !isSameOriginRequest(request.headers, env.PUBLIC_ORIGIN) ||
+    request.headers.get(CLIENT_HEADER) !== CLIENT_HEADER_VALUE
+  ) {
     return NextResponse.json(
-      { error: { code: 'forbidden', message: 'Cross-site logout refused' }, timestamp: new Date().toISOString() },
+      {
+        error: { code: 'forbidden', message: 'Cross-site logout refused' },
+        timestamp: new Date().toISOString(),
+      },
       { status: 403 },
     );
   }
@@ -44,8 +53,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
     logger.info({ event: 'session.logout', subject: session.subject }, 'user signed out');
   }
-  const response = NextResponse.redirect(target, 303);
-  response.headers.set('cache-control', 'no-store');
+  const response = NextResponse.json(
+    { redirectTo: target },
+    { headers: { 'cache-control': 'no-store' } },
+  );
   clearSession(env, response.cookies);
   return response;
 }

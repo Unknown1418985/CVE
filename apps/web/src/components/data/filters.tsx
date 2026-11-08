@@ -30,7 +30,10 @@ export function FilterBar({
   return (
     <div
       role="search"
-      className={cn('flex flex-wrap items-end gap-3 rounded-xl border border-border bg-card p-4', className)}
+      className={cn(
+        'flex flex-wrap items-end gap-3 rounded-xl border border-border bg-card p-4',
+        className,
+      )}
     >
       {children}
       {onReset === undefined ? null : (
@@ -92,7 +95,10 @@ export function SearchFilter({
   return (
     <FilterField label={label} htmlFor={id} className={cn('min-w-56 flex-1', className)}>
       <div className="relative">
-        <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+        <Search
+          className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+          aria-hidden="true"
+        />
         <Input
           id={id}
           type="search"
@@ -156,13 +162,20 @@ export function MultiSelectFilter({
     values.length === 0
       ? 'Any'
       : values.length <= 2
-        ? options.filter((option) => values.includes(option.value)).map((option) => option.label).join(', ')
+        ? options
+            .filter((option) => values.includes(option.value))
+            .map((option) => option.label)
+            .join(', ')
         : `${values.length} selected`;
   return (
     <FilterField label={label}>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" className="justify-between font-normal" aria-label={`${label}: ${summary}`}>
+          <Button
+            variant="outline"
+            className="justify-between font-normal"
+            aria-label={`${label}: ${summary}`}
+          >
             <span className="truncate">{summary}</span>
             <ChevronDown className="text-muted-foreground" aria-hidden="true" />
           </Button>
@@ -194,6 +207,9 @@ export function MultiSelectFilter({
   );
 }
 
-export function optionsFrom(values: readonly string[], label: (value: string) => string): SelectOption[] {
+export function optionsFrom(
+  values: readonly string[],
+  label: (value: string) => string,
+): SelectOption[] {
   return values.map((value) => ({ value, label: label(value) }));
 }
