@@ -34,6 +34,7 @@ describe('renderDevEnvFiles', () => {
     'REPORTING_SERVICE_MINIO_SECRET_KEY',
     'KEYCLOAK_API_CLIENT_SECRET',
     'KEYCLOAK_IDENTITY_SERVICE_CLIENT_SECRET',
+    'WEB_SESSION_SECRET',
     ...[
       'IDENTITY',
       'CVE',
@@ -85,6 +86,11 @@ describe('renderDevEnvFiles', () => {
     // The CVE Service validates tokens itself, but holds no Keycloak client secret.
     expect(cve).toContain('KEYCLOAK_URL=http://localhost:8180/auth');
     expect(cve).not.toContain('CLIENT_SECRET');
+    const web = files['apps/web/.env'] ?? '';
+    expect(web).toContain(`WEB_SESSION_SECRET=${values.get('WEB_SESSION_SECRET') ?? ''}`);
+    expect(web).toContain('API_GATEWAY_INTERNAL_URL=http://localhost:4000');
+    expect(web).toContain('KEYCLOAK_PUBLIC_URL=http://localhost:8180/auth');
+    expect(web).not.toContain(values.get('KEYCLOAK_API_CLIENT_SECRET') ?? 'x');
   });
 
   it('refuses placeholders', () => {

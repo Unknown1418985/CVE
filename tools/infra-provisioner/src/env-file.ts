@@ -153,5 +153,14 @@ export function renderDevEnvFiles(values: Map<string, string>): Record<string, s
       `KEYCLOAK_INTROSPECTION_CLIENT_SECRET=${required(values, 'KEYCLOAK_API_CLIENT_SECRET')}`,
     ].join('\n') +
     '\n';
+  files['apps/web/.env'] =
+    header +
+    [
+      'PUBLIC_ORIGIN=http://localhost:3000',
+      `API_GATEWAY_INTERNAL_URL=http://localhost:${SERVICE_DEFAULT_PORTS['api-gateway']}`,
+      `KEYCLOAK_PUBLIC_URL=http://localhost:${DEV_HOST_PORTS.keycloak}/auth`,
+      `WEB_SESSION_SECRET=${required(values, 'WEB_SESSION_SECRET')}`,
+    ].join('\n') +
+    '\n';
   return files;
 }

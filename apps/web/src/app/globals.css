@@ -1,6 +1,9 @@
 @import 'tailwindcss';
 
-/* Dark theme is the default (and currently only) theme. */
+/*
+ * Dark theme is the platform's only theme (CLAUDE.md §9). Severity and status colors are always
+ * paired with a text label or icon, so color never carries meaning alone.
+ */
 :root {
   color-scheme: dark;
   --background: oklch(0.16 0.01 260);
@@ -9,13 +12,35 @@
   --card-foreground: oklch(0.95 0.005 260);
   --sidebar: oklch(0.18 0.012 260);
   --muted: oklch(0.26 0.012 260);
-  --muted-foreground: oklch(0.7 0.01 260);
+  --muted-foreground: oklch(0.72 0.01 260);
   --border: oklch(0.3 0.012 260);
+  --ring: oklch(0.7 0.14 250);
   --primary: oklch(0.7 0.14 250);
   --primary-foreground: oklch(0.16 0.01 260);
   --status-ok: oklch(0.75 0.15 155);
   --status-degraded: oklch(0.8 0.15 85);
   --status-down: oklch(0.68 0.2 25);
+  --status-info: oklch(0.72 0.12 250);
+
+  /* Ordinal severity scale (CVSS qualitative ratings). */
+  --severity-critical: #e66767;
+  --severity-high: #ec835a;
+  --severity-medium: #fab219;
+  --severity-low: #3987e5;
+  --severity-none: #8b8a85;
+  --severity-unknown: #5f5e5a;
+
+  /* Categorical chart slots (validated dark steps, fixed order). */
+  --chart-1: #3987e5;
+  --chart-2: #d95926;
+  --chart-3: #199e70;
+  --chart-4: #c98500;
+  --chart-5: #d55181;
+  --chart-6: #008300;
+  --chart-7: #9085e9;
+  --chart-8: #e66767;
+  --chart-grid: oklch(0.3 0.012 260);
+  --chart-axis: oklch(0.65 0.01 260);
 }
 
 @theme inline {
@@ -27,15 +52,28 @@
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-border: var(--border);
+  --color-ring: var(--ring);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-status-ok: var(--status-ok);
   --color-status-degraded: var(--status-degraded);
   --color-status-down: var(--status-down);
+  --color-status-info: var(--status-info);
+  --color-severity-critical: var(--severity-critical);
+  --color-severity-high: var(--severity-high);
+  --color-severity-medium: var(--severity-medium);
+  --color-severity-low: var(--severity-low);
+  --color-severity-none: var(--severity-none);
+  --color-severity-unknown: var(--severity-unknown);
 }
 
 body {
   background-color: var(--background);
   color: var(--foreground);
   font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+.font-mono-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
 }
