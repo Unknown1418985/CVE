@@ -75,7 +75,7 @@ export function getServerEnv(): ServerEnv {
 export function getGatewayUrl(): string {
   const parsed = httpUrl('API_GATEWAY_INTERNAL_URL')
     .default('http://localhost:4000')
-    .safeParse(process.env['API_GATEWAY_INTERNAL_URL'] || undefined);
+    .safeParse(process.env['API_GATEWAY_INTERNAL_URL'] === '' ? undefined : process.env['API_GATEWAY_INTERNAL_URL']);
   if (!parsed.success) throw new Error('Invalid web server configuration: API_GATEWAY_INTERNAL_URL');
   return parsed.data;
 }

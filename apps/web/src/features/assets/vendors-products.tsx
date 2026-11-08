@@ -1,14 +1,13 @@
 'use client';
 
-import { PRODUCT_SORT_FIELDS, PRODUCT_TYPES, VENDOR_SORT_FIELDS, type PaginationMeta, type ProductSummary, type Vendor } from '@cve/contracts';
-import type { ReactElement, ReactNode } from 'react';
+import { PRODUCT_SORT_FIELDS, PRODUCT_TYPES, VENDOR_SORT_FIELDS, type ProductSummary, type Vendor } from '@cve/contracts';
+import type { ReactElement } from 'react';
 
 import { DataTable, type Column, type SortOrder } from '@/components/data/data-table';
 import { FilterBar, FilterField, SearchFilter, SelectFilter, optionsFrom } from '@/components/data/filters';
 import { InternalLink } from '@/components/data/links';
 import { PageHeader } from '@/components/data/page-header';
-import { Pagination } from '@/components/data/pagination';
-import { ErrorState } from '@/components/data/states';
+import { ResultsPanel as Results, type UpdateSearch } from '@/components/data/results';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -19,7 +18,7 @@ import { useProducts, useVendors } from './api';
 
 const DEFAULTS = { tab: 'vendors', q: '', origin: '', type: '', cpe: '', sort: '', order: '', page: '1', pageSize: '25' } as const;
 type Values = Record<keyof typeof DEFAULTS, string>;
-type Update = (patch: Record<string, string | number>) => void;
+type Update = UpdateSearch;
 
 const ORIGINS = [{ value: 'curated', label: 'Curated' }, { value: 'discovered', label: 'Discovered from CVE data' }];
 
@@ -50,20 +49,6 @@ function sortOf(values: Values, allowed: readonly string[], fallback: string, fa
   return { field, order };
 }
 
-function Results({ query, update, children }: {
-  query: { data: { meta: PaginationMeta } | undefined; isError: boolean; error: unknown; refetch: () => unknown };
-  update: Update;
-  children: ReactNode;
-}): ReactElement {
-  return (
-    <section className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
-      {query.isError ? <ErrorState error={query.error} onRetry={() => { void query.refetch(); }} /> : children}
-      {query.data === undefined || query.isError ? null : (
-        <Pagination meta={query.data.meta} onPageChange={(page) => { update({ page }); }} onPageSizeChange={(pageSize) => { update({ pageSize }); }} />
-      )}
-    </section>
-  );
-}
 
 function VendorsTab({ values, update }: { values: Values; update: Update }): ReactElement {
   const sort = sortOf(values, VENDOR_SORT_FIELDS, 'cveCount', 'desc');

@@ -73,6 +73,8 @@ function redirectToLogin(): void {
   if (typeof window === 'undefined' || redirectingToLogin) return;
   redirectingToLogin = true;
   const returnTo = `${window.location.pathname}${window.location.search}`;
+  // /session/login is a route handler (OIDC redirect), so it needs a full document navigation.
+  // eslint-disable-next-line @next/next/no-location-assign-relative-destination
   window.location.assign(`/session/login?returnTo=${encodeURIComponent(returnTo)}`);
 }
 

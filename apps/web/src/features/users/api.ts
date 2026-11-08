@@ -48,3 +48,11 @@ export function usePermissionCatalog() {
 export function useAuditEvents(query: QueryParams, enabled = true) {
   return useApiQuery({ path: 'audit-logs', schema: pageSchema(auditEventSchema), query, enabled, keepPrevious: true });
 }
+
+export function useAuditEvent(eventId: string | null) {
+  return useApiQuery({
+    path: apiPath('audit-logs', eventId ?? 'none'),
+    schema: dataSchema(auditEventSchema),
+    enabled: eventId !== null,
+  });
+}

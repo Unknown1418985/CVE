@@ -57,10 +57,11 @@ export function useDownloadArtifact(artifactId: string) {
   });
 }
 
-export function useArtifactScans(artifactId: string) {
+export function useArtifactScans(artifactId: string, enabled = true) {
   return useApiQuery({
     path: apiPath('download-artifacts', artifactId, 'scans'),
     schema: dataSchema(z.array(scanResultSchema)),
+    enabled,
   });
 }
 

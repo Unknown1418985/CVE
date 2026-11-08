@@ -159,7 +159,7 @@ export async function forwardToGateway(
     const contentType = request.headers.get('content-type');
     const text = await request.text();
     if (text.length > 0) {
-      if (contentType === null || !contentType.toLowerCase().startsWith('application/json')) {
+      if (!contentType?.toLowerCase().startsWith('application/json')) {
         return errorResponse(415, 'unsupported_media_type', 'Only JSON bodies are accepted', correlationId);
       }
       if (Buffer.byteLength(text) > MAX_BODY_BYTES) {

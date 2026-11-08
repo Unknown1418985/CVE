@@ -14,8 +14,7 @@ import { DataTable, type Column, type SortOrder } from '@/components/data/data-t
 import { FilterBar, FilterField, MultiSelectFilter, SearchFilter, SelectFilter, optionsFrom } from '@/components/data/filters';
 import { CveLink, InternalLink } from '@/components/data/links';
 import { PageHeader } from '@/components/data/page-header';
-import { Pagination } from '@/components/data/pagination';
-import { ErrorState } from '@/components/data/states';
+import { ResultsPanel as Results, type UpdateSearch } from '@/components/data/results';
 import { ConfidenceBadge, ReviewStatusBadge, VerificationBadge } from '@/components/data/status-badges';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -44,7 +43,7 @@ const DEFAULTS = {
 } as const;
 
 type Values = Record<keyof typeof DEFAULTS, string>;
-type Update = (patch: Record<string, string | number | string[]>) => void;
+type Update = UpdateSearch;
 
 const CVE_PATTERN = /^CVE-\d{4}-\d{4,19}$/;
 
@@ -269,23 +268,7 @@ function CveFilter({ value, update }: { value: string; update: Update }): ReactE
   );
 }
 
-interface PagedQuery {
-  readonly data: { meta: import('@cve/contracts').PaginationMeta } | undefined;
-  readonly isError: boolean;
-  readonly error: unknown;
-  refetch: () => unknown;
-}
 
-function Results({ query, update, children }: { query: PagedQuery; update: Update; children: ReactElement }): ReactElement {
-  return (
-    <section className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
-      {query.isError ? <ErrorState error={query.error} onRetry={() => { void query.refetch(); }} /> : children}
-      {query.data === undefined || query.isError ? null : (
-        <Pagination meta={query.data.meta} onPageChange={(page) => { update({ page }); }} onPageSizeChange={(pageSize) => { update({ pageSize }); }} />
-      )}
-    </section>
-  );
-}
 
 export function PocRepositoryView(): ReactElement {
   const { values, update } = useSearchState(DEFAULTS);
