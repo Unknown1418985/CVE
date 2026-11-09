@@ -27,6 +27,9 @@ The browser never holds an access or refresh token.
 - Tokens live in an AES-256-GCM sealed, `httpOnly`, `SameSite=Lax` cookie (`cve_session`, split
   into at most four chunks). The key is derived with HKDF from `WEB_SESSION_SECRET` and bound to
   its purpose, so a transaction cookie cannot be replayed as a session.
+  The chunks add up to about 14 KiB, so any reverse proxy in front of the web app needs larger
+  header buffers than Nginx's defaults (`infra/nginx/nginx.conf` sets them); otherwise the
+  `/session/callback` response fails with 502 and later requests with 400.
 - The proxy refreshes the access token 30 seconds before it expires. Keycloak rotates refresh
   tokens and refuses reuse, so concurrent requests share one refresh (`refreshSession`).
 - CSRF: every mutation through the proxy, and logout, requires the platform's `Origin` (or

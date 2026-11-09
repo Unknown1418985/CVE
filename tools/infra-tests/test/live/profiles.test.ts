@@ -81,6 +81,17 @@ describe.runIf(fullStack)('full stack through Nginx', () => {
     expect(res.headers.get('content-security-policy')).toContain("frame-ancestors 'none'");
   });
 
+  it('accepts the full set of chunked web session cookies', async () => {
+    // A signed-in browser sends cve_session plus up to three chunks of ~3.5 KiB each
+    // (apps/web/src/lib/auth/session.ts). Nginx's default 8 KiB header line limit answers 400.
+    const chunk = 'a'.repeat(3_500);
+    const cookie = ['cve_session', 'cve_session.1', 'cve_session.2', 'cve_session.3']
+      .map((name) => `${name}=${chunk}`)
+      .join('; ');
+    const res = await fetch(`${nginx}/signed-out`, { headers: { cookie } });
+    expect(res.status).toBe(200);
+  });
+
   it('sends visitors without a session through the Keycloak sign-in of the cve-web client', async () => {
     const home = await fetch(`${nginx}/`, { redirect: 'manual' });
     expect(home.status).toBe(307);
