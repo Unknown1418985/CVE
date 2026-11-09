@@ -17,6 +17,7 @@ import { createDomainEvent } from '@cve/messaging';
 import { isRetryable, type RequestMeter } from '@cve/source-http';
 import type { z } from 'zod';
 
+import { recordSyncRun } from './sync-metrics.js';
 import {
   LeaseLostError,
   type IntelligenceRepository,
@@ -223,6 +224,12 @@ export class SyncEngine {
         { runId, stats: state.stats, durationMs: finishedAt.getTime() - started.getTime() },
         'synchronisation succeeded',
       );
+      recordSyncRun(
+        request.source,
+        'succeeded',
+        (finishedAt.getTime() - started.getTime()) / 1000,
+        finishedAt,
+      );
       return { status: 'succeeded', run: { ...completed, cursorAfter } };
     } catch (caught) {
       const error = asError(
@@ -258,6 +265,12 @@ export class SyncEngine {
       logger.error(
         { err: error, runId: state.run.id, stats: state.stats, willRetry },
         'synchronisation failed',
+      );
+      recordSyncRun(
+        request.source,
+        'failed',
+        (finishedAt.getTime() - started.getTime()) / 1000,
+        finishedAt,
       );
       return { status: 'failed', run: failed, error, retryable };
     } finally {

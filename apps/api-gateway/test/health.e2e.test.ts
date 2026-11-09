@@ -61,6 +61,32 @@ describe('api-gateway health', () => {
     expect((res.body as { data: HealthReport }).data.service).toBe('api-gateway');
   });
 
+  it('GET /api/v1/health/ready is ready only while Keycloak serves signing keys', async () => {
+    let jwks: () => Promise<Response> = () =>
+      Promise.resolve(Response.json({ keys: [{ kid: 'k' }] }));
+    const requested: string[] = [];
+    t = await start((input) => {
+      const url = input instanceof Request ? input.url : input.toString();
+      requested.push(url);
+      return jwks();
+    });
+    const ready = await t.http.get('/api/v1/health/ready').expect(200);
+    expect((ready.body as { data: HealthReport }).data.checks).toMatchObject([
+      { name: 'keycloak', status: 'ok' },
+    ]);
+    expect(requested).toContain(
+      'http://keycloak.internal:8180/auth/realms/cve-platform/protocol/openid-connect/certs',
+    );
+
+    jwks = () => Promise.resolve(Response.json({ keys: [] }));
+    await t.http.get('/api/v1/health/ready').expect(503);
+    jwks = () => Promise.reject(new Error('ECONNREFUSED'));
+    const down = await t.http.get('/api/v1/health/ready').expect(503);
+    expect((down.body as { data: HealthReport }).data.checks[0]?.message).toContain('ECONNREFUSED');
+    // Liveness never depends on other systems, so a Keycloak outage does not restart the gateway.
+    await t.http.get('/api/v1/health/live').expect(200);
+  });
+
   it('GET /api/v1/health/services aggregates backend readiness for authorised callers', async () => {
     const requested: string[] = [];
     const fetchFn: HttpFetch = (input) => {

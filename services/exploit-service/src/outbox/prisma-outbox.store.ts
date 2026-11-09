@@ -1,5 +1,5 @@
 import { domainEventEnvelopeSchema } from '@cve/contracts';
-import type { OutboxRecord, OutboxStore } from '@cve/messaging';
+import type { OutboxBacklog, OutboxRecord, OutboxStore } from '@cve/messaging';
 
 import type { PrismaClient } from '../generated/prisma/client.js';
 
@@ -67,5 +67,19 @@ export class PrismaOutboxStore implements OutboxStore {
         lockedUntil: null,
       },
     });
+  }
+
+  /** Unpublished records and the age of the oldest one (`outbox_pending_events` metrics). */
+  async backlog(now: Date): Promise<OutboxBacklog> {
+    const [row] = await this.prisma.$queryRaw<{ pending: bigint; oldest: Date | null }[]>`
+      SELECT count(*) AS "pending", min("created_at") AS "oldest"
+        FROM "outbox_events"
+       WHERE "published_at" IS NULL`;
+    const oldest = row?.oldest ?? null;
+    return {
+      pending: Number(row?.pending ?? 0n),
+      oldestPendingAgeSeconds:
+        oldest === null ? null : Math.max(0, Math.round((now.getTime() - oldest.getTime()) / 1000)),
+    };
   }
 }

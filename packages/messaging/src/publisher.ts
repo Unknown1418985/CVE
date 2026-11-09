@@ -7,7 +7,10 @@ import type { Logger } from '@cve/logger';
 import type { ChannelModel, ConfirmChannel, Message } from 'amqplib';
 
 import type { RabbitMqConnection } from './connection.js';
+import { boundedLabel } from '@cve/metrics';
+
 import { EventPublishError, errorMessage } from './errors.js';
+import { eventsPublished } from './metrics.js';
 import { EVENTS_EXCHANGE } from './topology.js';
 
 export const CORRELATION_ID_HEADER = 'x-correlation-id';
@@ -128,7 +131,26 @@ export class EventPublisher {
 
     const message = toAmqpMessage(event);
     const timeoutMs = this.options.confirmTimeoutMs ?? 10_000;
-    await new Promise<void>((resolve, reject) => {
+    const eventType = boundedLabel(event.eventType);
+    try {
+      await this.confirmPublish(channel, message, timeoutMs);
+    } catch (error) {
+      eventsPublished().inc({ event_type: eventType, outcome: 'failed' });
+      throw error;
+    }
+    eventsPublished().inc({ event_type: eventType, outcome: 'confirmed' });
+    this.options.logger.debug(
+      { eventId: event.eventId, eventType: event.eventType, correlationId: event.correlationId },
+      'event published',
+    );
+  }
+
+  private confirmPublish(
+    channel: ConfirmChannel,
+    message: ReturnType<typeof toAmqpMessage>,
+    timeoutMs: number,
+  ): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
         reject(new EventPublishError(`Broker confirm timed out after ${timeoutMs}ms`));
       }, timeoutMs);
@@ -160,10 +182,6 @@ export class EventPublisher {
         );
       }
     });
-    this.options.logger.debug(
-      { eventId: event.eventId, eventType: event.eventType, correlationId: event.correlationId },
-      'event published',
-    );
   }
 
   async close(): Promise<void> {

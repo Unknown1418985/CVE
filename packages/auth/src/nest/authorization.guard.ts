@@ -12,6 +12,7 @@ import type { Request } from 'express';
 import type { Permission, Role } from '@cve/contracts';
 import { getCorrelationId, PUBLIC_ROUTE_METADATA } from '@cve/shared';
 
+import { recordAuthRejection } from '../metrics.js';
 import { hasAnyRole } from '../principal.js';
 import {
   AUTH_OPTIONS,
@@ -62,6 +63,7 @@ export class AuthorizationGuard implements CanActivate {
     const missing = permissions.filter((p) => !principal.permissions.includes(p));
     const roleOk = roles.length === 0 || hasAnyRole(principal, roles);
     if (missing.length === 0 && roleOk) return true;
+    recordAuthRejection('forbidden');
 
     this.options.logger.warn(
       {

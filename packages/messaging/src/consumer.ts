@@ -4,8 +4,11 @@ import type { ChannelModel, ConfirmChannel, ConsumeMessage } from 'amqplib';
 import type { z } from 'zod';
 
 import type { RabbitMqConnection } from './connection.js';
+import { boundedLabel } from '@cve/metrics';
+
 import type { DomainEvent } from './domain-event.js';
 import { NonRetryableEventError, errorMessage } from './errors.js';
+import { eventHandlerDuration, recordConsumed, type ConsumeOutcome } from './metrics.js';
 import type { ProcessedEventStore } from './processed-events.js';
 import { CORRELATION_ID_HEADER } from './publisher.js';
 import {
@@ -194,6 +197,7 @@ export class EventConsumer {
     } catch (error) {
       logger.error({ err: error }, 'invalid event moved to dead-letter queue');
       channel.nack(message, false, false);
+      recordConsumed(topology.queue, undefined, 'invalid');
       return;
     }
 
@@ -202,17 +206,28 @@ export class EventConsumer {
       if (store && (await store.isProcessed(subscription.consumer, event.eventId))) {
         logger.info({ eventType: event.eventType }, 'duplicate event skipped');
         channel.ack(message);
+        recordConsumed(topology.queue, event.eventType, 'duplicate');
         return;
       }
-      await subscription.handle(event, {
-        attempt,
-        redelivered: message.fields.redelivered,
-        logger,
+      const timer = eventHandlerDuration().startTimer({
+        queue: boundedLabel(topology.queue),
+        event_type: boundedLabel(event.eventType),
       });
+      try {
+        await subscription.handle(event, {
+          attempt,
+          redelivered: message.fields.redelivered,
+          logger,
+        });
+      } finally {
+        timer();
+      }
       if (store) await store.markProcessed(subscription.consumer, event.eventId);
       channel.ack(message);
+      recordConsumed(topology.queue, event.eventType, 'processed');
     } catch (error) {
-      await this.handleFailure(channel, message, topology, attempt, error, logger);
+      const outcome = await this.handleFailure(channel, message, topology, attempt, error, logger);
+      recordConsumed(topology.queue, event.eventType, outcome);
     }
   }
 
@@ -223,12 +238,12 @@ export class EventConsumer {
     attempt: number,
     error: unknown,
     logger: Logger,
-  ): Promise<void> {
+  ): Promise<ConsumeOutcome> {
     const action = decideFailureAction(topology, attempt, error);
     if (action.kind === 'dead-letter') {
       logger.error({ err: error, reason: action.reason }, 'event moved to dead-letter queue');
       channel.nack(message, false, false);
-      return;
+      return 'dead_lettered';
     }
     try {
       await new Promise<void>((resolve, reject) => {
@@ -261,10 +276,12 @@ export class EventConsumer {
         'event handler failed, retry scheduled',
       );
       channel.ack(message);
+      return 'retry_scheduled';
     } catch (publishError) {
       // The retry could not be stored; return the message to the queue so it is not lost.
       logger.error({ err: publishError }, 'failed to schedule retry, requeueing event');
       channel.nack(message, false, true);
+      return 'requeued';
     }
   }
 

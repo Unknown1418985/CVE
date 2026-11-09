@@ -24,6 +24,7 @@
   "dependencies": {
     "@cve/contracts": "workspace:*",
     "@cve/logger": "workspace:*",
+    "@cve/metrics": "workspace:*",
     "amqplib": "^2.2.1",
     "zod": "^4.6.7"
   },

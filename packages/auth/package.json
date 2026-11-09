@@ -23,6 +23,7 @@
   "dependencies": {
     "@cve/contracts": "workspace:*",
     "@cve/logger": "workspace:*",
+    "@cve/metrics": "workspace:*",
     "@cve/shared": "workspace:*",
     "jose": "^6.2.15",
     "zod": "^4.6.7"

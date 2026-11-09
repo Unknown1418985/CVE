@@ -29,6 +29,7 @@
     "@cve/jobs": "workspace:*",
     "@cve/logger": "workspace:*",
     "@cve/messaging": "workspace:*",
+    "@cve/metrics": "workspace:*",
     "@cve/shared": "workspace:*",
     "@cve/source-http": "workspace:*",
     "@nestjs/common": "^12.3.2",

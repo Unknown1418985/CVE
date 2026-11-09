@@ -5,6 +5,7 @@ import type { Redis } from 'ioredis';
 
 import type { JobDefinition } from './job-definition.js';
 import { bullPrefix } from './keys.js';
+import { jobDuration, recordJob } from './metrics.js';
 
 export interface JobContext {
   readonly jobId: string;
@@ -120,7 +121,10 @@ export class JobWorker<TPayload> {
           definition.timeoutMs,
           this.shutdown.signal,
         );
-        logger.info({ durationMs: Math.round(performance.now() - started) }, 'job completed');
+        const seconds = (performance.now() - started) / 1000;
+        jobDuration().observe({ queue: definition.queue }, seconds);
+        recordJob(definition.queue, 'completed');
+        logger.info({ durationMs: Math.round(seconds * 1000) }, 'job completed');
       },
       {
         connection: options.connection,
@@ -143,10 +147,12 @@ export class JobWorker<TPayload> {
         attemptsMade: job?.attemptsMade,
         maxAttempts: attempts,
       };
+      recordJob(definition.queue, final ? 'failed' : 'retrying');
       if (final) baseLogger.error(fields, 'job failed permanently');
       else baseLogger.warn(fields, 'job attempt failed, will retry');
     });
     this.worker.on('stalled', (jobId: string) => {
+      recordJob(definition.queue, 'stalled');
       baseLogger.warn({ jobId }, 'job stalled and will be reprocessed');
     });
     this.worker.on('error', (error: Error) => {

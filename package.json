@@ -23,7 +23,10 @@
     "clean": "turbo run clean && rm -rf node_modules .turbo",
     "env:generate": "pnpm --filter @cve/infra-provisioner build && node tools/infra-provisioner/dist/generate-env.js",
     "test:integration": "turbo run test:integration --concurrency=1",
-    "infra:wait": "pnpm --filter @cve/infra-provisioner build && node tools/infra-provisioner/dist/wait-for-stack.js"
+    "infra:wait": "pnpm --filter @cve/infra-provisioner build && node tools/infra-provisioner/dist/wait-for-stack.js",
+    "deploy:preflight": "pnpm --filter @cve/infra-provisioner build && node tools/infra-provisioner/dist/preflight-cli.js",
+    "backup": "sh infra/backup/backup.sh",
+    "backup:verify": "sh infra/backup/verify.sh"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

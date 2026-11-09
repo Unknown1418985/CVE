@@ -205,6 +205,9 @@ importers:
       '@cve/logger':
         specifier: workspace:*
         version: link:../logger
+      '@cve/metrics':
+        specifier: workspace:*
+        version: link:../metrics
       '@cve/shared':
         specifier: workspace:*
         version: link:../shared
@@ -319,6 +322,9 @@ importers:
       '@cve/logger':
         specifier: workspace:*
         version: link:../logger
+      '@cve/metrics':
+        specifier: workspace:*
+        version: link:../metrics
       bullmq:
         specifier: ^6.6.0
         version: 6.6.0(ioredis@6.0.0)(pg@8.23.1)
@@ -375,6 +381,9 @@ importers:
       '@cve/logger':
         specifier: workspace:*
         version: link:../logger
+      '@cve/metrics':
+        specifier: workspace:*
+        version: link:../metrics
       amqplib:
         specifier: ^2.2.1
         version: 2.2.1
@@ -385,6 +394,22 @@ importers:
       '@cve/testing':
         specifier: workspace:*
         version: link:../testing
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.19.2
+      typescript:
+        specifier: ~6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^5.1.0
+        version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@24.19.2)(vite@8.3.5(@types/node@24.19.2)(jiti@2.7.0)(yaml@2.9.1))
+
+  packages/metrics:
+    dependencies:
+      prom-client:
+        specifier: ^15.1.3
+        version: 15.1.3
+    devDependencies:
       '@types/node':
         specifier: ^24.0.0
         version: 24.19.2
@@ -431,6 +456,9 @@ importers:
       '@cve/logger':
         specifier: workspace:*
         version: link:../logger
+      '@cve/metrics':
+        specifier: workspace:*
+        version: link:../metrics
       '@cve/security':
         specifier: workspace:*
         version: link:../security
@@ -760,6 +788,9 @@ importers:
       '@cve/messaging':
         specifier: workspace:*
         version: link:../../packages/messaging
+      '@cve/metrics':
+        specifier: workspace:*
+        version: link:../../packages/metrics
       '@cve/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -1036,6 +1067,9 @@ importers:
       '@cve/messaging':
         specifier: workspace:*
         version: link:../../packages/messaging
+      '@cve/metrics':
+        specifier: workspace:*
+        version: link:../../packages/metrics
       '@cve/shared':
         specifier: workspace:*
         version: link:../../packages/shared

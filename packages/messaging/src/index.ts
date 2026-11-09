@@ -7,3 +7,4 @@ export * from './outbox.js';
 export * from './processed-events.js';
 export * from './publisher.js';
 export * from './topology.js';
+export * from './metrics.js';
