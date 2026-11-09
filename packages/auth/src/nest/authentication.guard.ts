@@ -13,6 +13,7 @@ import type { Request, Response } from 'express';
 import { getCorrelationId, PUBLIC_ROUTE_METADATA } from '@cve/shared';
 
 import { AuthenticationError, IdentityProviderUnavailableError } from '../errors.js';
+import { recordAuthRejection } from '../metrics.js';
 import { extractBearerToken } from '../token-verifier.js';
 import { AUTH_OPTIONS } from './auth.constants.js';
 import type { AuthModuleOptions } from './auth.options.js';
@@ -53,6 +54,7 @@ export class AuthenticationGuard implements CanActivate {
     } catch (error) {
       if (isPublic) return true;
       if (error instanceof AuthenticationError) {
+        recordAuthRejection(error.reason);
         this.options.logger.warn(
           {
             audit: true,
@@ -78,6 +80,7 @@ export class AuthenticationGuard implements CanActivate {
         );
       }
       if (error instanceof IdentityProviderUnavailableError) {
+        recordAuthRejection('idp-unavailable');
         this.options.logger.error(
           { err: error, correlationId: getCorrelationId(req) },
           'identity provider unavailable during authentication',

@@ -1,7 +1,15 @@
 import { createLogger } from '@cve/logger';
 import { afterAll, describe, expect, it } from 'vitest';
 
-import { createServiceMetrics, startMetricsServer } from './metrics.js';
+import type { HealthReport } from '@cve/contracts';
+import { counter } from '@cve/metrics';
+
+import {
+  collectMetricsText,
+  createServiceMetrics,
+  registerReadinessMetrics,
+  startMetricsServer,
+} from './metrics.js';
 
 describe('metrics server', () => {
   const metrics = createServiceMetrics('cve-service', '1.2.3');
@@ -32,5 +40,58 @@ describe('metrics server', () => {
 
     expect((await fetch(`${base}/other`)).status).toBe(404);
     expect((await fetch(`${base}/metrics`, { method: 'POST' })).status).toBe(404);
+  });
+});
+
+describe('platform and readiness metrics', () => {
+  it('serves platform instruments with the service labels', async () => {
+    const metrics = createServiceMetrics('poc-service', '2.0.0');
+    counter({ name: 'test_platform_events_total', help: 'h', labelNames: [] }).inc();
+    const text = await collectMetricsText(metrics);
+    expect(text).toMatch(/test_platform_events_total\{service="poc-service",version="2.0.0"\} 1/);
+    expect(text).toContain('process_cpu_user_seconds_total');
+  });
+
+  it('turns readiness into service_ready and service_dependency_up gauges', async () => {
+    const metrics = createServiceMetrics('download-service', '1.0.0');
+    let calls = 0;
+    const report: HealthReport = {
+      service: 'download-service',
+      version: '1.0.0',
+      status: 'degraded',
+      uptimeSeconds: 1,
+      timestamp: new Date().toISOString(),
+      checks: [
+        { name: 'postgres', status: 'ok' },
+        { name: 'clamav', status: 'degraded' },
+        { name: 'minio', status: 'down' },
+      ],
+    };
+    registerReadinessMetrics(metrics, () => {
+      calls += 1;
+      return Promise.resolve(report);
+    });
+    const text = await metrics.registry.metrics();
+    expect(text).toMatch(/service_ready\{[^}]*\} 1/);
+    expect(text).toMatch(/service_dependency_up\{dependency="postgres"[^}]*\} 1/);
+    expect(text).toMatch(/service_dependency_up\{dependency="clamav"[^}]*\} 0.5/);
+    expect(text).toMatch(/service_dependency_up\{dependency="minio"[^}]*\} 0/);
+    // Both gauges share one readiness evaluation per scrape.
+    expect(calls).toBe(1);
+  });
+
+  it('reports not ready when readiness is down', async () => {
+    const metrics = createServiceMetrics('cve-service', '1.0.0');
+    registerReadinessMetrics(metrics, () =>
+      Promise.resolve({
+        service: 'cve-service',
+        version: '1.0.0',
+        status: 'down',
+        uptimeSeconds: 1,
+        timestamp: new Date().toISOString(),
+        checks: [{ name: 'postgres', status: 'down' }],
+      }),
+    );
+    expect(await metrics.registry.metrics()).toMatch(/service_ready\{[^}]*\} 0/);
   });
 });

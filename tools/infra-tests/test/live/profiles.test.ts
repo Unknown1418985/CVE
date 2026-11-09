@@ -1,10 +1,26 @@
+import { readdirSync, readFileSync } from 'node:fs';
 import { connect } from 'node:net';
+import { resolve } from 'node:path';
 
 import { platformHealthSchema } from '@cve/contracts';
 import { integrationHost, requireEnv } from '@cve/testing/integration';
 import { describe, expect, it } from 'vitest';
+import { parse } from 'yaml';
 
 import { fullStack } from './mode.js';
+
+/** Rule group names in infra/prometheus/rules, which Prometheus must have loaded. */
+function configuredRuleGroups(): string[] {
+  const dir = resolve(import.meta.dirname, '../../../../infra/prometheus/rules');
+  return readdirSync(dir)
+    .filter((file) => file.endsWith('.yml'))
+    .flatMap(
+      (file) =>
+        (parse(readFileSync(resolve(dir, file), 'utf8')) as { groups: { name: string }[] }).groups,
+    )
+    .map((group) => group.name)
+    .sort();
+}
 
 /**
  * Checks for the full stack (`--profile apps --profile observability`, without compose.dev.yaml).
@@ -179,14 +195,16 @@ describe.runIf(fullStack)('observability', () => {
     const rules = await grafanaGet<{ data: { groups: { name: string }[] } }>(
       '/api/datasources/proxy/uid/prometheus/api/v1/rules',
     );
-    expect(rules.data.groups.map((group) => group.name).sort()).toEqual([
-      'availability',
-      'datastores',
-      'messaging',
-      'services',
-    ]);
+    expect(rules.data.groups.map((group) => group.name).sort()).toEqual(configuredRuleGroups());
     const dashboards = await grafanaGet<{ uid: string }[]>('/api/search?type=dash-db');
-    expect(dashboards.map((d) => d.uid)).toContain('cve-platform-infrastructure');
+    expect(dashboards.map((d) => d.uid)).toEqual(
+      expect.arrayContaining([
+        'cve-platform-infrastructure',
+        'cve-platform-services',
+        'cve-platform-pipeline',
+        'cve-platform-security',
+      ]),
+    );
   });
 
   it('rejects anonymous Grafana access', async () => {

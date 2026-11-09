@@ -1,0 +1,162 @@
+# Production overlay. Use together with compose.yaml on the production host:
+#
+#   export COMPOSE_FILE=compose.yaml:compose.prod.yaml
+#   pnpm deploy:preflight                       # validates .env, certificates and the host
+#   docker compose --profile apps --profile observability pull
+#   docker compose --profile apps --profile observability up -d --no-build
+#
+# What it changes (docs/deployment.md):
+# - Nginx terminates TLS (nginx.tls.conf) on 443, redirects 80 to HTTPS and answers only for
+#   PUBLIC_HOSTNAME. TLS certificates are mounted read-only from TLS_CERT_DIR.
+# - Application images come from IMAGE_REGISTRY with an immutable IMAGE_TAG (build and push them
+#   from CI or a build host with the same two files), so every host runs the same artifacts.
+# - Public URLs must be set explicitly: no local defaults, HTTPS only (checked by preflight).
+# - OpenAPI documentation is disabled and containers restart always.
+# Requires Docker Compose 2.24 or later (`!override`).
+
+x-prod-app: &prod-app
+  restart: always
+
+services:
+  nginx:
+    restart: always
+    environment:
+      PUBLIC_HOSTNAME: ${PUBLIC_HOSTNAME:?PUBLIC_HOSTNAME is required in production}
+      NGINX_ENVSUBST_OUTPUT_DIR: /tmp
+    volumes:
+      - ./infra/nginx/nginx.tls.conf:/etc/nginx/nginx.conf:ro
+      - ./infra/nginx/templates:/etc/nginx/templates:ro
+      - ${TLS_CERT_DIR:?TLS_CERT_DIR is required in production}:/etc/nginx/tls:ro
+      - ${ACME_WEBROOT_DIR:-./acme-webroot}:/var/www/acme:ro
+    ports: !override
+      - '${PUBLIC_BIND_ADDRESS:-0.0.0.0}:80:8080'
+      - '${PUBLIC_BIND_ADDRESS:-0.0.0.0}:443:8443'
+
+  keycloak:
+    restart: always
+    environment:
+      KC_HOSTNAME: ${KEYCLOAK_PUBLIC_URL:?KEYCLOAK_PUBLIC_URL is required in production (https://<host>/auth)}
+      KEYCLOAK_WEB_ORIGIN: ${PUBLIC_ORIGIN:?PUBLIC_ORIGIN is required in production}
+      # No development origin in production.
+      KEYCLOAK_WEB_DEV_ORIGIN: ${PUBLIC_ORIGIN:?PUBLIC_ORIGIN is required in production}
+
+  infra-provisioner:
+    image: ${IMAGE_REGISTRY:?IMAGE_REGISTRY is required in production}/cve-platform-infra-provisioner:${IMAGE_TAG:?IMAGE_TAG is required in production}
+
+  web:
+    <<: *prod-app
+    image: ${IMAGE_REGISTRY:?IMAGE_REGISTRY is required in production}/cve-platform-web:${IMAGE_TAG:?IMAGE_TAG is required in production}
+    environment:
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?PUBLIC_ORIGIN is required in production}
+      KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL:?KEYCLOAK_PUBLIC_URL is required in production (https://<host>/auth)}
+
+  api-gateway:
+    <<: *prod-app
+    image: ${IMAGE_REGISTRY:?IMAGE_REGISTRY is required in production}/cve-platform-api-gateway:${IMAGE_TAG:?IMAGE_TAG is required in production}
+    environment:
+      SWAGGER_ENABLED: 'false'
+      KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL:?KEYCLOAK_PUBLIC_URL is required in production (https://<host>/auth)}
+
+  identity-service-migrate:
+    image: ${IMAGE_REGISTRY:?IMAGE_REGISTRY is required in production}/cve-platform-identity-service:${IMAGE_TAG:?IMAGE_TAG is required in production}
+
+  identity-service:
+    <<: *prod-app
+    image: ${IMAGE_REGISTRY:?IMAGE_REGISTRY is required in production}/cve-platform-identity-service:${IMAGE_TAG:?IMAGE_TAG is required in production}
+    environment:
+      SWAGGER_ENABLED: 'false'
+      KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL:?KEYCLOAK_PUBLIC_URL is required in production (https://<host>/auth)}
+
+  cve-service-migrate:
+    image: ${IMAGE_REGISTRY:?IMAGE_REGISTRY is required in production}/cve-platform-cve-service:${IMAGE_TAG:?IMAGE_TAG is required in production}
+
+  cve-service:
+    <<: *prod-app
+    image: ${IMAGE_REGISTRY:?IMAGE_REGISTRY is required in production}/cve-platform-cve-service:${IMAGE_TAG:?IMAGE_TAG is required in production}
+    environment:
+      SWAGGER_ENABLED: 'false'
+      KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL:?KEYCLOAK_PUBLIC_URL is required in production (https://<host>/auth)}
+
+  intelligence-service-migrate:
+    image: ${IMAGE_REGISTRY:?IMAGE_REGISTRY is required in production}/cve-platform-intelligence-service:${IMAGE_TAG:?IMAGE_TAG is required in production}
+
+  intelligence-service:
+    <<: *prod-app
+    image: ${IMAGE_REGISTRY:?IMAGE_REGISTRY is required in production}/cve-platform-intelligence-service:${IMAGE_TAG:?IMAGE_TAG is required in production}
+    environment:
+      SWAGGER_ENABLED: 'false'
+      KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL:?KEYCLOAK_PUBLIC_URL is required in production (https://<host>/auth)}
+
+  asset-service-migrate:
+    image: ${IMAGE_REGISTRY:?IMAGE_REGISTRY is required in production}/cve-platform-asset-service:${IMAGE_TAG:?IMAGE_TAG is required in production}
+
+  asset-service:
+    <<: *prod-app
+    image: ${IMAGE_REGISTRY:?IMAGE_REGISTRY is required in production}/cve-platform-asset-service:${IMAGE_TAG:?IMAGE_TAG is required in production}
+    environment:
+      SWAGGER_ENABLED: 'false'
+      KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL:?KEYCLOAK_PUBLIC_URL is required in production (https://<host>/auth)}
+
+  poc-service-migrate:
+    image: ${IMAGE_REGISTRY:?IMAGE_REGISTRY is required in production}/cve-platform-poc-service:${IMAGE_TAG:?IMAGE_TAG is required in production}
+
+  poc-service:
+    <<: *prod-app
+    image: ${IMAGE_REGISTRY:?IMAGE_REGISTRY is required in production}/cve-platform-poc-service:${IMAGE_TAG:?IMAGE_TAG is required in production}
+    environment:
+      SWAGGER_ENABLED: 'false'
+      KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL:?KEYCLOAK_PUBLIC_URL is required in production (https://<host>/auth)}
+
+  download-service-migrate:
+    image: ${IMAGE_REGISTRY:?IMAGE_REGISTRY is required in production}/cve-platform-download-service:${IMAGE_TAG:?IMAGE_TAG is required in production}
+
+  download-service:
+    <<: *prod-app
+    image: ${IMAGE_REGISTRY:?IMAGE_REGISTRY is required in production}/cve-platform-download-service:${IMAGE_TAG:?IMAGE_TAG is required in production}
+    environment:
+      SWAGGER_ENABLED: 'false'
+      KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL:?KEYCLOAK_PUBLIC_URL is required in production (https://<host>/auth)}
+
+  exploit-service-migrate:
+    image: ${IMAGE_REGISTRY:?IMAGE_REGISTRY is required in production}/cve-platform-exploit-service:${IMAGE_TAG:?IMAGE_TAG is required in production}
+
+  exploit-service:
+    <<: *prod-app
+    image: ${IMAGE_REGISTRY:?IMAGE_REGISTRY is required in production}/cve-platform-exploit-service:${IMAGE_TAG:?IMAGE_TAG is required in production}
+    environment:
+      SWAGGER_ENABLED: 'false'
+      KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL:?KEYCLOAK_PUBLIC_URL is required in production (https://<host>/auth)}
+
+  reporting-service:
+    <<: *prod-app
+    image: ${IMAGE_REGISTRY:?IMAGE_REGISTRY is required in production}/cve-platform-reporting-service:${IMAGE_TAG:?IMAGE_TAG is required in production}
+    environment:
+      SWAGGER_ENABLED: 'false'
+
+  notification-service:
+    <<: *prod-app
+    image: ${IMAGE_REGISTRY:?IMAGE_REGISTRY is required in production}/cve-platform-notification-service:${IMAGE_TAG:?IMAGE_TAG is required in production}
+    environment:
+      SWAGGER_ENABLED: 'false'
+
+  # Data stores, identity and observability keep their pinned upstream images.
+  postgres:
+    restart: always
+  redis:
+    restart: always
+  rabbitmq:
+    restart: always
+  opensearch:
+    restart: always
+  minio:
+    restart: always
+  clamav:
+    restart: always
+  prometheus:
+    restart: always
+  alertmanager:
+    restart: always
+    environment:
+      ALERTMANAGER_WEBHOOK_URL: ${ALERTMANAGER_WEBHOOK_URL:?ALERTMANAGER_WEBHOOK_URL is required in production}
+  grafana:
+    restart: always

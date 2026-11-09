@@ -5,6 +5,7 @@ import type { Redis } from 'ioredis';
 
 import type { JobDefinition } from './job-definition.js';
 import { bullPrefix } from './keys.js';
+import { registerQueueDepthSource } from './metrics.js';
 
 export interface JobQueueOptions {
   readonly connection: Redis;
@@ -74,7 +75,10 @@ export class JobQueue<TPayload> {
     this.queue.on('error', (error: Error) => {
       options.logger.error({ err: error, queue: definition.queue }, 'job queue error');
     });
+    this.unregisterDepth = registerQueueDepthSource(definition.queue, () => this.counts());
   }
+
+  private readonly unregisterDepth: () => void;
 
   private validate(payload: TPayload): TPayload {
     return this.definition.payloadSchema.parse(payload);
@@ -139,6 +143,7 @@ export class JobQueue<TPayload> {
   }
 
   async close(): Promise<void> {
+    this.unregisterDepth();
     await this.queue.close();
   }
 }

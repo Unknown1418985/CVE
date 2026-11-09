@@ -72,37 +72,39 @@ This document describes the structure established in Phase 0. It is updated as e
 
 ## Cross-cutting conventions (implemented in Phase 0)
 
-| Concern          | Implementation                                                                              |
-| ---------------- | ------------------------------------------------------------------------------------------- |
-| Configuration    | `@cve/config`: Zod schemas, fail-fast `loadEnv`, error messages never include values        |
-| Logging          | `@cve/logger`: Pino JSON with ISO time, service name, secret redaction, Nest adapter        |
-| Correlation IDs  | `x-correlation-id` accepted when log-safe, otherwise generated; echoed and logged           |
-| Security headers | helmet with a `default-src 'none'` CSP for APIs (relaxed only for `/api/v1/docs`)           |
-| CORS             | Explicit origin allowlist; wildcards rejected at startup                                    |
-| Rate limiting    | `@nestjs/throttler` at the gateway (defaults in `@cve/security`), plus Nginx `limit_req`    |
-| Errors           | Global filter producing `{ error: { code, message, details? }, correlationId, timestamp }`  |
-| Body size        | JSON bodies limited to 1 MB                                                                 |
-| OpenAPI          | `@nestjs/swagger`, served at `/api/v1/docs` when `SWAGGER_ENABLED=true`                     |
-| Health           | `HealthModule` with pluggable indicators; readiness returns 503 when a critical one is down |
+| Concern          | Implementation                                                                                           |
+| ---------------- | -------------------------------------------------------------------------------------------------------- |
+| Configuration    | `@cve/config`: Zod schemas, fail-fast `loadEnv`, error messages never include values                     |
+| Logging          | `@cve/logger`: Pino JSON with ISO time, service name, secret redaction, Nest adapter                     |
+| Correlation IDs  | `x-correlation-id` accepted when log-safe, otherwise generated; echoed and logged                        |
+| Security headers | helmet with a `default-src 'none'` CSP for APIs (relaxed only for `/api/v1/docs`)                        |
+| CORS             | Explicit origin allowlist; wildcards rejected at startup                                                 |
+| Rate limiting    | `@nestjs/throttler` at the gateway (defaults in `@cve/security`), plus Nginx `limit_req`                 |
+| Errors           | Global filter producing `{ error: { code, message, details? }, correlationId, timestamp }`               |
+| Body size        | JSON bodies limited to 1 MB                                                                              |
+| OpenAPI          | `@nestjs/swagger`, served at `/api/v1/docs` when `SWAGGER_ENABLED=true`                                  |
+| Health           | `HealthModule`: liveness, readiness (503 when a critical dependency is down or shutting down)            |
+| Metrics          | `prom-client` on an internal port; shared instruments in `@cve/metrics` ([monitoring.md](monitoring.md)) |
 
-Readiness indicators currently verify TCP reachability of PostgreSQL, RabbitMQ and Redis. They will
-be replaced by protocol-level checks (`SELECT 1`, AMQP channel, `PING`) once each service owns real
-clients for those dependencies.
+Services with domain logic check their dependencies at protocol level (`SELECT 1`, the AMQP
+connection, `PING`, the MinIO bucket); the gateway checks Keycloak's signing keys. The Reporting and
+Notification services, which have no domain logic yet, still use TCP reachability checks.
 
 ## Shared packages
 
-| Package          | Depends on                                         | Used by                   |
-| ---------------- | -------------------------------------------------- | ------------------------- |
-| `@cve/contracts` | zod                                                | everything                |
-| `@cve/config`    | zod                                                | services, gateway         |
-| `@cve/logger`    | pino                                               | shared, services, gateway |
-| `@cve/security`  | helmet                                             | shared, gateway           |
-| `@cve/database`  | —                                                  | services                  |
-| `@cve/shared`    | contracts, config, logger, security, NestJS (peer) | services, gateway         |
-| `@cve/testing`   | NestJS testing, supertest, unplugin-swc            | tests only                |
-| `@cve/messaging` | contracts, logger, amqplib                         | services                  |
-| `@cve/jobs`      | contracts, logger, bullmq, ioredis                 | services                  |
-| `@cve/auth`      | contracts, logger, shared, jose, NestJS (peer)     | services, gateway         |
+| Package          | Depends on                                              | Used by                                 |
+| ---------------- | ------------------------------------------------------- | --------------------------------------- |
+| `@cve/contracts` | zod                                                     | everything                              |
+| `@cve/config`    | zod                                                     | services, gateway                       |
+| `@cve/logger`    | pino                                                    | shared, services, gateway               |
+| `@cve/security`  | helmet                                                  | shared, gateway                         |
+| `@cve/database`  | —                                                       | services                                |
+| `@cve/shared`    | contracts, config, logger, security, NestJS (peer)      | services, gateway                       |
+| `@cve/testing`   | NestJS testing, supertest, unplugin-swc                 | tests only                              |
+| `@cve/messaging` | contracts, logger, amqplib                              | services                                |
+| `@cve/jobs`      | contracts, logger, bullmq, ioredis                      | services                                |
+| `@cve/auth`      | contracts, logger, shared, metrics, jose, NestJS (peer) | services, gateway                       |
+| `@cve/metrics`   | prom-client                                             | shared, messaging, jobs, auth, services |
 
 Packages are ESM, compiled with `tsc` to `dist/`, and built before dependants by Turborepo
 (`dependsOn: ["^build"]`). Shared packages contain no business logic.
@@ -137,5 +139,7 @@ that fetches PoC content.
 - A user with `quarantine:manage` must explicitly release an artifact before it is served.
 - Downloaded content is never executed, extracted or previewed.
 
-The following are specified in `CLAUDE.md` and are deliberately not implemented yet: web login,
-TLS termination, metrics and backups (Phase 10).
+Phase 10 hardening (TLS termination, alerting, backups, production deployment) is described in
+[deployment.md](deployment.md), [monitoring.md](monitoring.md) and
+[disaster-recovery.md](disaster-recovery.md). Open findings are tracked in the
+[production readiness report](production-readiness.md).

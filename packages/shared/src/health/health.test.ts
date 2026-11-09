@@ -10,6 +10,7 @@ import { createHttpTestApp, type HttpTestApp } from '@cve/testing';
 import { configureServiceApp } from '../bootstrap/configure-service-app.js';
 import { createTcpHealthIndicator, type HealthIndicator } from './health-indicator.js';
 import { HealthModule } from './health.module.js';
+import { HealthService } from './health.service.js';
 
 const logger = createLogger({ service: 'test', level: 'silent' });
 
@@ -73,6 +74,20 @@ describe('health endpoints', () => {
     expect((res.body as { data: { checks: unknown[] } }).data.checks).toEqual([
       { name: 'broken', status: 'down', message: 'boom' },
     ]);
+    await t.close();
+  });
+});
+
+describe('shutdown', () => {
+  it('fails readiness once shutdown begins while liveness stays ok', async () => {
+    const t = await start([fixed('ok')]);
+    await t.http.get('/api/v1/health/ready').expect(200);
+    t.app.get(HealthService).markShuttingDown();
+    const res = await t.http.get('/api/v1/health/ready').expect(503);
+    expect((res.body as { data: { checks: unknown[] } }).data.checks).toEqual([
+      { name: 'shutdown', status: 'down', message: 'service is shutting down' },
+    ]);
+    await t.http.get('/api/v1/health/live').expect(200);
     await t.close();
   });
 });

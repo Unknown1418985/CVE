@@ -119,6 +119,9 @@ users in through its own backend-for-frontend routes; see [docs/web.md](docs/web
 | `pnpm env:generate`     | Create `.env` and per-app dev `.env` files with random secrets |
 | `pnpm infra:wait`       | Wait until the Compose stack is healthy and provisioned        |
 | `pnpm test:integration` | Live tests against the running stack (see docs)                |
+| `pnpm deploy:preflight` | Validate a production `.env`, TLS certificate and host         |
+| `pnpm backup`           | Encrypted backup set of databases, objects and configuration   |
+| `pnpm backup:verify`    | Verify a backup set (`latest` or a directory)                  |
 
 Run a single workspace with `pnpm --filter @cve/<name> <script>`.
 
@@ -130,20 +133,24 @@ Run a single workspace with `pnpm --filter @cve/<name> <script>`.
 - [Identity, authentication and authorization](docs/identity.md)
 - [CVE Service](docs/cve-service.md)
 - [Exploit Service](docs/exploit-service.md)
+- [Production deployment](docs/deployment.md)
+- [Monitoring, health checks and alerting](docs/monitoring.md)
+- [Backup and disaster recovery](docs/disaster-recovery.md)
+- [Production readiness report](docs/production-readiness.md)
 - [Development specification](CLAUDE.md)
 
 ## Roadmap
 
-| Phase | Scope                                                | Status     |
-| ----- | ---------------------------------------------------- | ---------- |
-| 0     | Monorepo and infrastructure foundation               | Done       |
-| 1     | Authentication, authorization, audit logging         | Done (API) |
-| 2     | CVE Service and database                             | Done (API) |
-| 3     | NVD, MITRE, CISA and EPSS integrations               | Done (API) |
-| 4     | Asset and product intelligence                       | Done (API) |
-| 5     | PoC discovery and metadata management                | Done (API) |
-| 6     | Secure automated downloads and MinIO storage         | Done (API) |
-| 7     | Exploit intelligence                                 | Done (API) |
-| 8     | Dashboard and analytics                              | Web UI     |
-| 9     | Reporting and notifications                          | Planned    |
-| 10    | Production hardening, backup, monitoring, deployment | Planned    |
+| Phase | Scope                                                | Status                                                 |
+| ----- | ---------------------------------------------------- | ------------------------------------------------------ |
+| 0     | Monorepo and infrastructure foundation               | Done                                                   |
+| 1     | Authentication, authorization, audit logging         | Done (API)                                             |
+| 2     | CVE Service and database                             | Done (API)                                             |
+| 3     | NVD, MITRE, CISA and EPSS integrations               | Done (API)                                             |
+| 4     | Asset and product intelligence                       | Done (API)                                             |
+| 5     | PoC discovery and metadata management                | Done (API)                                             |
+| 6     | Secure automated downloads and MinIO storage         | Done (API)                                             |
+| 7     | Exploit intelligence                                 | Done (API)                                             |
+| 8     | Dashboard and analytics                              | Web UI                                                 |
+| 9     | Reporting and notifications                          | Planned                                                |
+| 10    | Production hardening, backup, monitoring, deployment | In review (see [report](docs/production-readiness.md)) |

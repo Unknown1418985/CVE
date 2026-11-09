@@ -9,26 +9,31 @@ pnpm env:generate                                          # .env with random se
 docker compose up -d --build                               # data stores, Keycloak, provisioning jobs
 pnpm infra:wait                                            # blocks until healthy / provisioned
 docker compose --profile apps up -d --build                # + gateway, 9 services, web, Nginx → http://localhost:8080
-docker compose --profile observability up -d               # + Prometheus, Grafana → http://localhost:3001
+docker compose --profile observability up -d               # + Prometheus, Alertmanager, Grafana → http://localhost:3001
 ```
+
+Production hosts add [`compose.prod.yaml`](../compose.prod.yaml) (TLS, registry images, required public
+URLs); see [deployment.md](deployment.md). Backups and recovery: [disaster-recovery.md](disaster-recovery.md).
+Health checks, metrics, dashboards and alerts: [monitoring.md](monitoring.md).
 
 `pnpm env:generate` keeps existing files; pass `-- --force` to regenerate. Compose refuses to start
 when a required variable is missing.
 
 ## Components
 
-| Component  | Image                                    | Role                                                          |
-| ---------- | ---------------------------------------- | ------------------------------------------------------------- |
-| PostgreSQL | `postgres:17-alpine`                     | One database and login role per service, plus Keycloak        |
-| Redis      | `redis:7.4-alpine`                       | BullMQ queues, caches, idempotency keys (ACL users)           |
-| RabbitMQ   | `rabbitmq:4.1-management-alpine`         | Domain events (`cve` vhost, quorum queues)                    |
-| OpenSearch | `opensearchproject/opensearch:2.19.1`    | Search, TLS with a local CA, security plugin                  |
-| MinIO      | `${MINIO_IMAGE}`                         | Artifact and report storage (see [MinIO image](#minio-image)) |
-| Keycloak   | `keycloak/keycloak:26.4`                 | OIDC provider, realm `cve-platform`, served under `/auth`     |
-| Nginx      | `nginx:1.28-alpine`                      | Reverse proxy for web, API and Keycloak; unprivileged         |
-| Prometheus | `prom/prometheus:v3.5.0`                 | Metrics and alert rules                                       |
-| Grafana    | `grafana/grafana:12.1.0`                 | Provisioned datasource and infrastructure dashboard           |
-| Exporters  | postgres-exporter, redis_exporter, nginx | Metrics for components without a native endpoint              |
+| Component    | Image                                    | Role                                                          |
+| ------------ | ---------------------------------------- | ------------------------------------------------------------- |
+| PostgreSQL   | `postgres:17-alpine`                     | One database and login role per service, plus Keycloak        |
+| Redis        | `redis:7.4-alpine`                       | BullMQ queues, caches, idempotency keys (ACL users)           |
+| RabbitMQ     | `rabbitmq:4.1-management-alpine`         | Domain events (`cve` vhost, quorum queues)                    |
+| OpenSearch   | `opensearchproject/opensearch:2.19.1`    | Search, TLS with a local CA, security plugin                  |
+| MinIO        | `${MINIO_IMAGE}`                         | Artifact and report storage (see [MinIO image](#minio-image)) |
+| Keycloak     | `keycloak/keycloak:26.4`                 | OIDC provider, realm `cve-platform`, served under `/auth`     |
+| Nginx        | `nginx:1.28-alpine`                      | Reverse proxy for web, API and Keycloak; unprivileged         |
+| Prometheus   | `prom/prometheus:v3.5.0`                 | Metrics and alert rules                                       |
+| Alertmanager | `prom/alertmanager:v0.28.1`              | Alert routing to `ALERTMANAGER_WEBHOOK_URL`                   |
+| Grafana      | `grafana/grafana:12.1.0`                 | Provisioned datasources and four platform dashboards          |
+| Exporters    | postgres-exporter, redis_exporter, nginx | Metrics for components without a native endpoint              |
 
 One-shot jobs run before the services start and exit with status 0:
 
@@ -108,7 +113,7 @@ hashes, OpenSearch stores a bcrypt hash of the admin password.
 ## Persistent volumes
 
 `postgres-data`, `redis-data` (AOF + snapshots), `rabbitmq-data`, `opensearch-data`, `minio-data`
-(versioned buckets), `prometheus-data` (15 days / 4 GB), `grafana-data`, plus
+(versioned buckets), `prometheus-data` (15 days / 4 GB), `alertmanager-data` (silences), `grafana-data`, plus
 `opensearch-certs` (keystores), `opensearch-security` (security bootstrap config) and `platform-ca`
 (public CA certificate mounted read-only into clients). `docker compose down -v` deletes them all.
 
@@ -183,9 +188,11 @@ Prometheus endpoint and is not scraped yet.
 
 Alert rules (`infra/prometheus/rules`): target down, messages in any dead-letter queue, queue
 backlog, RabbitMQ resource alarms, Redis memory (noeviction), PostgreSQL connection saturation and
-service 5xx rate. Alertmanager is not deployed yet (Phase 10). Grafana provisions the Prometheus
-datasource and the **CVE Platform — Infrastructure** dashboard; anonymous access and sign-up are
-disabled.
+service 5xx rate. Application-level rules (readiness, outbox, jobs, authentication, SSRF blocks, malware,
+source synchronisation) live in `rules/services.yml`. Prometheus sends alerts to Alertmanager,
+which delivers them to `ALERTMANAGER_WEBHOOK_URL`. Grafana provisions the Prometheus and
+Alertmanager datasources and four dashboards (Infrastructure, Services, Events/Jobs/Sources,
+Security); anonymous access and sign-up are disabled. Details: [monitoring.md](monitoring.md).
 
 ## Rotating secrets
 
@@ -228,8 +235,10 @@ CI runs both modes in the `integration` job of `.github/workflows/ci.yml`.
 
 ## Known limitations
 
-- No TLS on Nginx yet (Phase 10); it listens on `127.0.0.1` only. OpenSearch already uses TLS;
-  PostgreSQL, Redis, RabbitMQ and MinIO traffic stays on internal networks without TLS.
-- Single-node deployments of every store; no backups yet (Phase 10).
+- `compose.yaml` alone serves plain HTTP on `127.0.0.1`; TLS is terminated by Nginx with
+  [`compose.prod.yaml`](../compose.prod.yaml). OpenSearch uses TLS; PostgreSQL, Redis, RabbitMQ and
+  MinIO traffic stays on internal networks without TLS.
+- Single-node deployments of every store (no high availability). Backups: [`infra/backup`](../infra/backup),
+  see [disaster-recovery.md](disaster-recovery.md).
 - OpenSearch needs `vm.max_map_count ≥ 262144` on the Docker host for production use and
   unlimited `memlock`; it logs a warning and continues when memory cannot be locked.

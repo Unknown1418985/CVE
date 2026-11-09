@@ -6,7 +6,12 @@ import { NestFactory } from '@nestjs/core';
 import type { BaseServiceEnv } from '@cve/config';
 import { createLogger, PinoNestLogger, type Logger } from '@cve/logger';
 
-import { createServiceMetrics, startMetricsServer } from '../metrics/metrics.js';
+import { HealthService } from '../health/health.service.js';
+import {
+  createServiceMetrics,
+  registerReadinessMetrics,
+  startMetricsServer,
+} from '../metrics/metrics.js';
 import { configureServiceApp } from './configure-service-app.js';
 
 export interface BootstrapServiceOptions {
@@ -34,6 +39,11 @@ export async function bootstrapService(options: BootstrapServiceOptions): Promis
     logger.fatal({ err: reason }, 'unhandled promise rejection');
     process.exitCode = 1;
   });
+  process.on('uncaughtException', (error) => {
+    // Log as structured JSON before exiting; the orchestrator restarts the container.
+    logger.fatal({ err: error }, 'uncaught exception');
+    process.exit(1);
+  });
 
   const app = await NestFactory.create(options.module, {
     logger: new PinoNestLogger(logger),
@@ -53,6 +63,10 @@ export async function bootstrapService(options: BootstrapServiceOptions): Promis
     swaggerEnabled: env.SWAGGER_ENABLED,
     ...(metrics ? { metrics } : {}),
   });
+  if (metrics) {
+    const health = findHealthService(app);
+    if (health) registerReadinessMetrics(metrics, () => health.readiness());
+  }
   app.enableShutdownHooks();
 
   await app.listen(env.PORT, env.HOST);
@@ -69,6 +83,14 @@ export async function bootstrapService(options: BootstrapServiceOptions): Promis
   }
   logger.info({ port: env.PORT, host: env.HOST, version: options.version }, 'service started');
   return { app, logger };
+}
+
+function findHealthService(app: INestApplication): HealthService | undefined {
+  try {
+    return app.get(HealthService, { strict: false });
+  } catch {
+    return undefined;
+  }
 }
 
 /** Standard process entrypoint wrapper: logs startup failures as JSON and exits non-zero. */

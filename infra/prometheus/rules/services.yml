@@ -1,0 +1,168 @@
+# Application-level alerts. They use only metrics the services really export
+# (packages/metrics, packages/shared/src/metrics, the download and intelligence services).
+groups:
+  - name: service-health
+    rules:
+      - alert: ServiceNotReady
+        expr: service_ready == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: '{{ $labels.service }} reports itself not ready'
+          description: 'A critical dependency is down or the service is shutting down. Check /api/v1/health/ready.'
+      - alert: ServiceDependencyDown
+        expr: service_dependency_up == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: '{{ $labels.service }} cannot reach {{ $labels.dependency }}'
+      - alert: ServiceDependencyDegraded
+        expr: service_dependency_up == 0.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: '{{ $labels.service }}: non-critical dependency {{ $labels.dependency }} is unavailable'
+          description: 'For the Download Service this usually means a scanner is down and new artifacts stay incomplete (never released).'
+      - alert: ServiceRestarting
+        expr: changes(process_start_time_seconds{job="services"}[30m]) > 2
+        labels:
+          severity: warning
+        annotations:
+          summary: '{{ $labels.service }} restarted more than twice in 30 minutes'
+      - alert: ServiceHighLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum by (service, le) (rate(http_server_request_duration_seconds_bucket{route!="unmatched"}[5m]))
+          ) > 2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: '{{ $labels.service }} p95 latency is above 2 s'
+
+  - name: events-and-jobs
+    rules:
+      - alert: OutboxBacklog
+        expr: outbox_oldest_pending_age_seconds > 300
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: '{{ $labels.service }} has outbox events waiting for more than 5 minutes'
+          description: 'Events are not reaching RabbitMQ. Check the broker connection and outbox_events.last_error.'
+      - alert: OutboxStalled
+        expr: outbox_oldest_pending_age_seconds > 1800
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: '{{ $labels.service }} outbox has not published for 30 minutes'
+      - alert: EventsDeadLettered
+        expr: sum by (service, queue) (increase(messaging_events_consumed_total{outcome=~"dead_lettered|invalid"}[15m])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: '{{ $labels.service }} dead-lettered events from {{ $labels.queue }}'
+      - alert: BackgroundJobsFailing
+        expr: sum by (service, queue) (increase(jobs_processed_total{outcome="failed"}[30m])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: '{{ $labels.service }} jobs on {{ $labels.queue }} failed permanently'
+      - alert: BackgroundJobBacklog
+        expr: sum by (service, queue) (job_queue_jobs{state=~"waiting|prioritized"}) > 1000
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: '{{ $labels.service }} queue {{ $labels.queue }} has more than 1000 waiting jobs'
+
+  - name: security
+    rules:
+      - alert: IdentityProviderUnavailable
+        expr: sum by (service) (increase(auth_requests_rejected_total{reason="idp-unavailable"}[5m])) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: '{{ $labels.service }} could not reach Keycloak to validate tokens'
+      - alert: AuthenticationFailureSpike
+        expr: sum by (service) (rate(auth_requests_rejected_total{reason!~"forbidden|idp-unavailable|missing-token"}[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'More than 1 invalid token per second at {{ $labels.service }}'
+          description: 'Possible token replay, forged tokens or a misconfigured client. Review the audit log (authentication failed).'
+      - alert: AccessDeniedSpike
+        expr: sum by (service) (rate(auth_requests_rejected_total{reason="forbidden"}[10m])) > 0.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Sustained authorization denials at {{ $labels.service }}'
+          description: 'A user or client keeps calling endpoints it lacks permissions for. Review the audit log (access denied).'
+      - alert: RateLimitingActive
+        expr: sum by (service) (rate(http_server_request_duration_seconds_count{status_code="429"}[5m])) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: '{{ $labels.service }} is rate limiting more than 1 request per second'
+      - alert: DownloadPolicyViolations
+        expr: |
+          sum by (source, code) (increase(download_attempts_total{
+            code=~"url-not-allowed|host-not-allowed|address-blocked|invalid-redirect|too-many-redirects"
+          }[1h])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Download Service blocked {{ $labels.code }} for {{ $labels.source }}'
+          description: 'A download tried to leave the allowlist or reach a private address (SSRF protection). Inspect the download request and its source.'
+      - alert: MaliciousArtifactDetected
+        expr: sum (increase(artifact_scans_total{status="malicious"}[15m])) > 0
+        labels:
+          severity: info
+        annotations:
+          summary: 'A downloaded artifact was classified as malicious and stays quarantined'
+      - alert: ArtifactIntegrityFailure
+        expr: sum (increase(artifact_scans_total{status="integrity-failure"}[15m])) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: 'A stored artifact no longer matches its SHA-256'
+          description: 'Possible object storage tampering or corruption. The release (if any) was revoked automatically; investigate MinIO access logs.'
+      - alert: ArtifactScannerErrors
+        expr: sum by (scanner) (increase(artifact_scanner_verdicts_total{verdict="error"}[30m])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Scanner {{ $labels.scanner }} reported errors; affected artifacts stay incomplete'
+
+  - name: intelligence-sources
+    rules:
+      - alert: SourceSyncFailing
+        expr: sum by (source) (increase(source_sync_runs_total{status="failed"}[2h])) > 2
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Synchronisation of {{ $labels.source }} failed repeatedly'
+      - alert: SourceSyncStale
+        expr: time() - source_sync_last_success_timestamp_seconds > 2 * 86400
+        labels:
+          severity: warning
+        annotations:
+          summary: '{{ $labels.source }} has not synchronised successfully for 2 days'
+
+  - name: alerting
+    rules:
+      - alert: AlertNotificationsFailing
+        expr: sum (rate(alertmanager_notifications_failed_total[10m])) > 0
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Alertmanager cannot deliver notifications'
+          description: 'Check ALERTMANAGER_WEBHOOK_URL and the receiver. Alerts are only visible in Grafana and Alertmanager until fixed.'

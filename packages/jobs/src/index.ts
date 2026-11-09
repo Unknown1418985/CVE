@@ -4,3 +4,4 @@ export * from './job-definition.js';
 export * from './keys.js';
 export * from './queue.js';
 export * from './worker.js';
+export * from './metrics.js';

@@ -1,0 +1,2 @@
+# Rendered by the nginx image entrypoint (envsubst) into /tmp/server-name.conf.
+server_name ${PUBLIC_HOSTNAME};
